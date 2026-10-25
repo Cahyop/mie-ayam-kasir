@@ -56,8 +56,10 @@ export function buildReceiptLines(data: ReceiptData, paperWidth: "58" | "80"): R
   }
 
   push({ text: rule(cols) });
-  push({ text: twoCol("Subtotal", formatPlain(data.subtotal), cols) });
-  if (data.discount > 0) push({ text: twoCol("Diskon", formatPlain(data.discount), cols) });
+  if (data.discount > 0) {
+    push({ text: twoCol("Subtotal", formatPlain(data.subtotal), cols) });
+    push({ text: twoCol("Diskon", formatPlain(data.discount), cols) });
+  }
   push({
     text: twoCol("TOTAL", formatPlain(data.total), cols),
     bold: true,
@@ -91,8 +93,10 @@ export function buildWaText(data: ReceiptData): string {
     out.push(`   ${formatPlain(item.price)} = ${formatPlain(item.total)}`);
   }
   out.push("──────────────");
-  out.push(`Subtotal: Rp ${formatPlain(data.subtotal)}`);
-  if (data.discount > 0) out.push(`Diskon: Rp ${formatPlain(data.discount)}`);
+  if (data.discount > 0) {
+    out.push(`Subtotal: Rp ${formatPlain(data.subtotal)}`);
+    out.push(`Diskon: Rp ${formatPlain(data.discount)}`);
+  }
   out.push(`*Total: Rp ${formatPlain(data.total)}*`);
   out.push(
     `Bayar: ${data.paymentMethod === "cash" ? "Tunai" : "QRIS"} (Rp ${formatPlain(data.paidAmount)})`,

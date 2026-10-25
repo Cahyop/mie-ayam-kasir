@@ -542,15 +542,17 @@ function KasirPage() {
             )}
 
             <div className="space-y-1 pt-2">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Subtotal</span>
-                <span>{formatRupiah(cartTotal)}</span>
-              </div>
               {discount > 0 && (
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Diskon</span>
-                  <span>- {formatRupiah(discount)}</span>
-                </div>
+                <>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Subtotal</span>
+                    <span>{formatRupiah(cartTotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Diskon</span>
+                    <span>- {formatRupiah(discount)}</span>
+                  </div>
+                </>
               )}
               <div className="flex justify-between text-base font-bold">
                 <span>Total Bayar</span>

@@ -70,6 +70,24 @@ describe("Receipt and format helpers", () => {
     expect(waText).not.toContain("Kembalian:");
   });
 
+  it("omits Subtotal when there is no discount (discount = 0)", () => {
+    const noDiscountReceipt: ReceiptData = {
+      ...dummyReceipt,
+      discount: 0,
+      total: 40000,
+    };
+    const lines = buildReceiptLines(noDiscountReceipt, "58");
+    const texts = lines.map((l) => l.text);
+    expect(texts.some((t) => t.includes("Subtotal"))).toBe(false);
+    expect(texts.some((t) => t.includes("Diskon"))).toBe(false);
+    expect(texts.some((t) => t.includes("TOTAL"))).toBe(true);
+
+    const waText = buildWaText(noDiscountReceipt);
+    expect(waText).not.toContain("Subtotal:");
+    expect(waText).not.toContain("Diskon:");
+    expect(waText).toContain("*Total: Rp 40.000*");
+  });
+
   it("formats WhatsApp receipt text correctly", () => {
     const waText = buildWaText(dummyReceipt);
     expect(waText).toContain("*Mie Ayam Berkah*");
