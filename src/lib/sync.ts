@@ -237,6 +237,15 @@ export function initSync(): () => void {
   if (initialized) return () => undefined;
   initialized = true;
 
+  // Immediately resolve active session if available
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    const userId = session?.user?.id ?? null;
+    if (userId && !currentUserId) {
+      currentUserId = userId;
+      void handleUserSwitch(userId);
+    }
+  });
+
   const { data } = supabase.auth.onAuthStateChange((event, session) => {
     const userId = session?.user?.id ?? null;
     if (event === "SIGNED_OUT") {

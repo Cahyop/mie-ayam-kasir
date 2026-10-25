@@ -3,13 +3,19 @@ import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { enqueueDelete, enqueueUpsert, getUserId } from "@/lib/sync";
+import { supabase } from "@/integrations/supabase/client";
 import { uid } from "@/lib/format";
 import type { Customer } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Plus, Pencil, Trash2, Phone, MessageSquare, User } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, Phone, MessageSquare, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/pelanggan")({
@@ -46,12 +52,26 @@ const emptyDraft: CustomerDraft = {
   note: "",
 };
 
+const SAMPLE_CUSTOMERS = [
+  { name: "Pak Budi", phone: "081234567890", note: "Langganan kantor, suka kuah dipisah" },
+  { name: "Ibu Siti", phone: "089876543210", note: "Ekstra pangsit goreng" },
+];
+
 function PelangganPage() {
-  const customers = useLiveQuery(() => db.customers.orderBy("name").toArray(), []);
+  const customers = useLiveQuery(async () => {
+    try {
+      const all = await db.customers.toArray();
+      return all.sort((a, b) => a.name.localeCompare(b.name, "id-ID"));
+    } catch {
+      return [];
+    }
+  }, []);
+
   const transactions = useLiveQuery(() => db.transactions.toArray(), []);
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState<CustomerDraft | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [seeding, setSeeding] = useState(false);
 
   const filtered = (customers ?? []).filter((c) => {
     const q = search.toLowerCase();
@@ -70,14 +90,20 @@ function PelangganPage() {
     return acc;
   }, {});
 
+  async function resolveUserId(): Promise<string> {
+    const current = getUserId();
+    if (current) return current;
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id ?? "anonymous";
+  }
+
   async function save() {
     if (!draft) return;
     if (!draft.name.trim()) {
       toast.error("Nama pelanggan wajib diisi");
       return;
     }
-    const userId = getUserId();
-    if (!userId) return;
+    const userId = await resolveUserId();
     const now = new Date().toISOString();
     const existing = draft.id ? await db.customers.get(draft.id) : undefined;
     const row: Customer = {
@@ -103,6 +129,32 @@ function PelangganPage() {
     toast.success("Pelanggan dihapus");
   }
 
+  async function handleSeedSampleCustomers() {
+    setSeeding(true);
+    try {
+      const userId = await resolveUserId();
+      const now = new Date().toISOString();
+      for (const item of SAMPLE_CUSTOMERS) {
+        const row: Customer = {
+          id: uid(),
+          user_id: userId,
+          name: item.name,
+          phone: item.phone,
+          note: item.note,
+          created_at: now,
+          updated_at: now,
+        };
+        await db.customers.put(row);
+        await enqueueUpsert("customers", row);
+      }
+      toast.success("Contoh pelanggan berhasil ditambahkan!");
+    } catch {
+      toast.error("Gagal menambahkan contoh pelanggan");
+    } finally {
+      setSeeding(false);
+    }
+  }
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -124,8 +176,22 @@ function PelangganPage() {
 
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-            {search ? "Tidak ada pelanggan yang cocok." : "Belum ada data pelanggan."}
+          <div className="rounded-2xl border border-dashed border-border py-10 text-center">
+            <p className="text-sm text-muted-foreground mb-3">
+              {search ? "Tidak ada pelanggan yang cocok." : "Belum ada data pelanggan."}
+            </p>
+            {!search && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSeedSampleCustomers}
+                disabled={seeding}
+                className="gap-1.5 text-xs text-primary"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {seeding ? "Memuat…" : "Muat Contoh Pelanggan"}
+              </Button>
+            )}
           </div>
         ) : (
           filtered.map((customer) => {
@@ -206,7 +272,9 @@ function PelangganPage() {
       <Dialog open={!!draft} onOpenChange={(o) => !o && setDraft(null)}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>{draft?.id ? "Edit Pelanggan" : "Tambah Pelanggan Baru"}</DialogTitle>
+            <DialogTitle>
+              {draft?.id ? "Edit Pelanggan" : "Tambah Pelanggan Baru"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
@@ -244,13 +312,16 @@ function PelangganPage() {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Pelanggan?</AlertDialogTitle>
             <AlertDialogDescription>
-              Data pelanggan "{deleteTarget?.name}" akan dihapus dari daftar. Transaksi yang sudah
-              dicatat sebelumnya tidak akan terpengaruh.
+              Data pelanggan "{deleteTarget?.name}" akan dihapus dari daftar. Transaksi yang
+              sudah dicatat sebelumnya tidak akan terpengaruh.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

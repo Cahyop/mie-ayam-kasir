@@ -33,6 +33,10 @@ class PosDatabase extends Dexie {
       outbox: "++seq",
       meta: "key",
     });
+    this.version(2).stores({
+      products: "id, name, updated_at, active, category",
+      customers: "id, name, updated_at",
+    });
   }
 }
 
