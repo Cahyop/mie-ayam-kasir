@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
@@ -76,9 +76,7 @@ function KasirPage() {
   function changeQty(productId: string | null, delta: number) {
     setCart((prev) =>
       prev
-        .map((item) =>
-          item.product_id === productId ? { ...item, qty: item.qty + delta } : item,
-        )
+        .map((item) => (item.product_id === productId ? { ...item, qty: item.qty + delta } : item))
         .filter((item) => item.qty > 0),
     );
   }
@@ -233,7 +231,9 @@ function KasirPage() {
                     <Plus className="h-3.5 w-3.5" />
                   </Button>
                   <button
-                    onClick={() => setCart((prev) => prev.filter((c) => c.product_id !== item.product_id))}
+                    onClick={() =>
+                      setCart((prev) => prev.filter((c) => c.product_id !== item.product_id))
+                    }
                     className="ml-1 text-muted-foreground"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -349,7 +349,11 @@ function KasirPage() {
         </SheetContent>
       </Sheet>
 
-      <ReceiptDialog receipt={receipt} onClose={() => setReceipt(null)} paperWidth={settings?.paper_width ?? "58"} />
+      <ReceiptDialog
+        receipt={receipt}
+        onClose={() => setReceipt(null)}
+        paperWidth={settings?.paper_width ?? "58"}
+      />
       {userId === null && <p className="hidden">x</p>}
     </div>
   );

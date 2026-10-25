@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
@@ -9,12 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -188,7 +183,9 @@ function ProdukPage() {
                   <Input
                     inputMode="numeric"
                     value={draft.price ? formatPlain(draft.price) : ""}
-                    onChange={(e) => setDraft({ ...draft, price: parseNumberInput(e.target.value) })}
+                    onChange={(e) =>
+                      setDraft({ ...draft, price: parseNumberInput(e.target.value) })
+                    }
                   />
                 </div>
               </div>
@@ -198,7 +195,9 @@ function ProdukPage() {
                   <Input
                     inputMode="numeric"
                     value={formatPlain(draft.stock)}
-                    onChange={(e) => setDraft({ ...draft, stock: parseNumberInput(e.target.value) })}
+                    onChange={(e) =>
+                      setDraft({ ...draft, stock: parseNumberInput(e.target.value) })
+                    }
                   />
                 </div>
               )}

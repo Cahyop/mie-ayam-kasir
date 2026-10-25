@@ -15,6 +15,9 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedKasRouteImport } from './routes/_authenticated/kas'
 import { Route as AuthenticatedKasirRouteImport } from './routes/_authenticated/kasir'
+import { Route as AuthenticatedLainnyaRouteImport } from './routes/_authenticated/lainnya'
+import { Route as AuthenticatedPelangganRouteImport } from './routes/_authenticated/pelanggan'
+import { Route as AuthenticatedPengaturanRouteImport } from './routes/_authenticated/pengaturan'
 import { Route as AuthenticatedProdukRouteImport } from './routes/_authenticated/produk'
 import { Route as AuthenticatedRiwayatRouteImport } from './routes/_authenticated/riwayat'
 
@@ -47,6 +50,21 @@ const AuthenticatedKasirRoute = AuthenticatedKasirRouteImport.update({
   path: '/kasir',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedLainnyaRoute = AuthenticatedLainnyaRouteImport.update({
+  id: '/lainnya',
+  path: '/lainnya',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPelangganRoute = AuthenticatedPelangganRouteImport.update({
+  id: '/pelanggan',
+  path: '/pelanggan',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPengaturanRoute = AuthenticatedPengaturanRouteImport.update({
+  id: '/pengaturan',
+  path: '/pengaturan',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedProdukRoute = AuthenticatedProdukRouteImport.update({
   id: '/produk',
   path: '/produk',
@@ -64,6 +82,9 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/kas': typeof AuthenticatedKasRoute
   '/kasir': typeof AuthenticatedKasirRoute
+  '/lainnya': typeof AuthenticatedLainnyaRoute
+  '/pelanggan': typeof AuthenticatedPelangganRoute
+  '/pengaturan': typeof AuthenticatedPengaturanRoute
   '/produk': typeof AuthenticatedProdukRoute
   '/riwayat': typeof AuthenticatedRiwayatRoute
 }
@@ -73,6 +94,9 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/kas': typeof AuthenticatedKasRoute
   '/kasir': typeof AuthenticatedKasirRoute
+  '/lainnya': typeof AuthenticatedLainnyaRoute
+  '/pelanggan': typeof AuthenticatedPelangganRoute
+  '/pengaturan': typeof AuthenticatedPengaturanRoute
   '/produk': typeof AuthenticatedProdukRoute
   '/riwayat': typeof AuthenticatedRiwayatRoute
 }
@@ -84,6 +108,9 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/kas': typeof AuthenticatedKasRoute
   '/_authenticated/kasir': typeof AuthenticatedKasirRoute
+  '/_authenticated/lainnya': typeof AuthenticatedLainnyaRoute
+  '/_authenticated/pelanggan': typeof AuthenticatedPelangganRoute
+  '/_authenticated/pengaturan': typeof AuthenticatedPengaturanRoute
   '/_authenticated/produk': typeof AuthenticatedProdukRoute
   '/_authenticated/riwayat': typeof AuthenticatedRiwayatRoute
 }
@@ -95,6 +122,9 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/kas'
     | '/kasir'
+    | '/lainnya'
+    | '/pelanggan'
+    | '/pengaturan'
     | '/produk'
     | '/riwayat'
   fileRoutesByTo: FileRoutesByTo
@@ -104,6 +134,9 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/kas'
     | '/kasir'
+    | '/lainnya'
+    | '/pelanggan'
+    | '/pengaturan'
     | '/produk'
     | '/riwayat'
   id:
@@ -114,6 +147,9 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/kas'
     | '/_authenticated/kasir'
+    | '/_authenticated/lainnya'
+    | '/_authenticated/pelanggan'
+    | '/_authenticated/pengaturan'
     | '/_authenticated/produk'
     | '/_authenticated/riwayat'
   fileRoutesById: FileRoutesById
@@ -169,6 +205,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedKasirRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/lainnya': {
+      id: '/_authenticated/lainnya'
+      path: '/lainnya'
+      fullPath: '/lainnya'
+      preLoaderRoute: typeof AuthenticatedLainnyaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/pelanggan': {
+      id: '/_authenticated/pelanggan'
+      path: '/pelanggan'
+      fullPath: '/pelanggan'
+      preLoaderRoute: typeof AuthenticatedPelangganRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/pengaturan': {
+      id: '/_authenticated/pengaturan'
+      path: '/pengaturan'
+      fullPath: '/pengaturan'
+      preLoaderRoute: typeof AuthenticatedPengaturanRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/produk': {
       id: '/_authenticated/produk'
       path: '/produk'
@@ -189,6 +246,9 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedKasRoute: typeof AuthenticatedKasRoute
   AuthenticatedKasirRoute: typeof AuthenticatedKasirRoute
+  AuthenticatedLainnyaRoute: typeof AuthenticatedLainnyaRoute
+  AuthenticatedPelangganRoute: typeof AuthenticatedPelangganRoute
+  AuthenticatedPengaturanRoute: typeof AuthenticatedPengaturanRoute
   AuthenticatedProdukRoute: typeof AuthenticatedProdukRoute
   AuthenticatedRiwayatRoute: typeof AuthenticatedRiwayatRoute
 }
@@ -196,6 +256,9 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedKasRoute: AuthenticatedKasRoute,
   AuthenticatedKasirRoute: AuthenticatedKasirRoute,
+  AuthenticatedLainnyaRoute: AuthenticatedLainnyaRoute,
+  AuthenticatedPelangganRoute: AuthenticatedPelangganRoute,
+  AuthenticatedPengaturanRoute: AuthenticatedPengaturanRoute,
   AuthenticatedProdukRoute: AuthenticatedProdukRoute,
   AuthenticatedRiwayatRoute: AuthenticatedRiwayatRoute,
 }

@@ -100,12 +100,7 @@ export type ReceiptData = {
 };
 
 export type OutboxTable =
-  | "products"
-  | "customers"
-  | "transactions"
-  | "transaction_items"
-  | "cash_flows"
-  | "settings";
+  "products" | "customers" | "transactions" | "transaction_items" | "cash_flows" | "settings";
 
 export type OutboxEntry = {
   seq?: number;

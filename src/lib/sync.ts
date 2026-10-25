@@ -73,10 +73,7 @@ export function scheduleSync(delayMs = 2000) {
   }, delayMs);
 }
 
-export async function enqueueUpsert(
-  table: OutboxTable,
-  row: Record<string, unknown>,
-) {
+export async function enqueueUpsert(table: OutboxTable, row: Record<string, unknown>) {
   const withTs = { ...row, updated_at: row.updated_at ?? new Date().toISOString() };
   await db.outbox.add({ table, op: "upsert", row: withTs });
   await updatePendingCount();
@@ -137,7 +134,10 @@ async function pullTable(table: OutboxTable): Promise<void> {
   const metaKey = `lastPull:${table}`;
   let cursor = (await getMeta<string>(metaKey)) ?? "1970-01-01T00:00:00.000Z";
   const startCursor = cursor;
-  const store = db[table as keyof typeof db] as never as { get: (id: string) => Promise<Record<string, unknown> | undefined>; put: (row: Record<string, unknown>) => Promise<unknown> };
+  const store = db[table as keyof typeof db] as never as {
+    get: (id: string) => Promise<Record<string, unknown> | undefined>;
+    put: (row: Record<string, unknown>) => Promise<unknown>;
+  };
 
   for (let page = 0; page < 100; page++) {
     const { data, error } = await supabase

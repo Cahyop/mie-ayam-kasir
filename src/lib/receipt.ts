@@ -24,7 +24,8 @@ function centerText(text: string, cols: number): string {
 }
 
 function twoCol(left: string, right: string, cols: number): string {
-  const l = left.length > cols - right.length - 1 ? left.slice(0, cols - right.length - 2) + "…" : left;
+  const l =
+    left.length > cols - right.length - 1 ? left.slice(0, cols - right.length - 2) + "…" : left;
   const spaces = Math.max(1, cols - l.length - right.length);
   return l + " ".repeat(spaces) + right;
 }
@@ -63,7 +64,11 @@ export function buildReceiptLines(data: ReceiptData, paperWidth: "58" | "80"): R
   if (data.discount > 0) push({ text: twoCol("Diskon", formatPlain(data.discount), cols) });
   push({ text: twoCol("TOTAL", formatPlain(data.total), cols), bold: true });
   push({
-    text: twoCol(data.paymentMethod === "cash" ? "TUNAI" : "QRIS", formatPlain(data.paidAmount), cols),
+    text: twoCol(
+      data.paymentMethod === "cash" ? "TUNAI" : "QRIS",
+      formatPlain(data.paidAmount),
+      cols,
+    ),
   });
   if (data.paymentMethod === "cash") {
     push({ text: twoCol("KEMBALI", formatPlain(data.changeAmount), cols) });
@@ -91,7 +96,9 @@ export function buildWaText(data: ReceiptData): string {
   out.push(`Subtotal: Rp ${formatPlain(data.subtotal)}`);
   if (data.discount > 0) out.push(`Diskon: Rp ${formatPlain(data.discount)}`);
   out.push(`*Total: Rp ${formatPlain(data.total)}*`);
-  out.push(`Bayar: ${data.paymentMethod === "cash" ? "Tunai" : "QRIS"} (Rp ${formatPlain(data.paidAmount)})`);
+  out.push(
+    `Bayar: ${data.paymentMethod === "cash" ? "Tunai" : "QRIS"} (Rp ${formatPlain(data.paidAmount)})`,
+  );
   if (data.paymentMethod === "cash") {
     out.push(`Kembalian: Rp ${formatPlain(data.changeAmount)}`);
   }
@@ -137,10 +144,7 @@ export async function renderReceiptImage(
     const size = line.large ? fontPx * 1.5 : fontPx;
     ctx.font = `${line.bold ? "bold " : ""}${size}px "Courier New", monospace`;
     const textWidth = ctx.measureText(line.text).width;
-    const x =
-      line.align === "center"
-        ? Math.max(0, (width - textWidth) / 2)
-        : padding - 6;
+    const x = line.align === "center" ? Math.max(0, (width - textWidth) / 2) : padding - 6;
     ctx.fillText(line.text, x, y);
     y += line.large ? lineH * 1.25 : lineH;
     if (line.gapAfter) y += lineH * 0.6;
@@ -192,7 +196,7 @@ export function printBrowserReceipt(data: ReceiptData, paperWidth: "58" | "80") 
 <style>
   @page { size: ${widthMm}mm auto; margin: 2mm; }
   body { margin: 0; font-family: "Courier New", monospace; font-size: ${paperWidth === "58" ? 11 : 12}px; white-space: pre; width: ${widthMm - 6}mm; }
-</style></head><body>${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c] as string))}</body></html>`);
+</style></head><body>${text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] as string)}</body></html>`);
   win.document.close();
   win.focus();
   win.print();

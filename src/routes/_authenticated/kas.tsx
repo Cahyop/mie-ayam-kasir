@@ -1,25 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { deleteCashFlow, saveCashFlow } from "@/lib/sales";
-import {
-  formatRupiah,
-  formatPlain,
-  parseNumberInput,
-  formatDateShortId,
-  formatTimeId,
-} from "@/lib/format";
+import { formatRupiah, formatPlain, parseNumberInput, formatTimeId } from "@/lib/format";
 import type { CashFlow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,7 +16,10 @@ export const Route = createFileRoute("/_authenticated/kas")({
   head: () => ({
     meta: [
       { title: "Kas — POS Mie Ayam" },
-      { name: "description", content: "Catat modal awal, kas masuk, kas keluar, dan saldo harian." },
+      {
+        name: "description",
+        content: "Catat modal awal, kas masuk, kas keluar, dan saldo harian.",
+      },
     ],
   }),
   component: KasPage,
@@ -137,7 +129,10 @@ function KasPage() {
                 {flow.type === "out" ? "−" : "+"}
                 {formatRupiah(flow.amount)}
               </span>
-              <button onClick={() => void deleteCashFlow(flow.id)} className="text-muted-foreground">
+              <button
+                onClick={() => void deleteCashFlow(flow.id)}
+                className="text-muted-foreground"
+              >
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -203,7 +198,6 @@ function Summary({
       <p className={`text-base font-bold ${value < 0 ? "text-destructive" : ""}`}>
         {formatRupiah(value)}
       </p>
-      <span className="hidden">{formatDateShortId(new Date().toISOString())}</span>
     </div>
   );
 }

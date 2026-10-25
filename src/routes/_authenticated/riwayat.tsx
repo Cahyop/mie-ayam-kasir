@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/_authenticated/riwayat")({
   component: RiwayatPage,
 });
 
-function RiwayatPage() {
+export function RiwayatPage() {
   const transactions = useLiveQuery(
     async () => db.transactions.orderBy("created_at").reverse().limit(300).toArray(),
     [],
@@ -76,13 +76,11 @@ function RiwayatPage() {
               <button
                 key={t.id}
                 onClick={() => setOpenId(t.id)}
-                className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-3 text-left"
+                className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-3 text-left transition-colors hover:bg-accent/40 active:scale-[0.99]"
               >
                 <div>
                   <p className="text-sm font-semibold">{t.receipt_no}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatTimeId(t.created_at)} · {t.itemsCount ?? ""} item
-                  </p>
+                  <p className="text-xs text-muted-foreground">{formatTimeId(t.created_at)}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold">{formatRupiah(t.total)}</p>
@@ -125,9 +123,6 @@ async function loadItems(transactionId: string) {
   return db.transaction_items.where("transaction_id").equals(transactionId).toArray();
 }
 
-import { useEffect } from "react";
-import { getTransactionItems } from "@/lib/sales";
-
 function TransactionSheet({
   transaction,
   onClose,
@@ -137,10 +132,7 @@ function TransactionSheet({
   transaction: Transaction | null;
   onClose: () => void;
   onReceipt: (data: ReceiptData) => void;
-  buildReceipt: (
-    t: Transaction,
-    items: Awaited<ReturnType<typeof loadItems>>,
-  ) => ReceiptData;
+  buildReceipt: (t: Transaction, items: Awaited<ReturnType<typeof loadItems>>) => ReceiptData;
 }) {
   const items = useLiveQuery(
     async () => (transaction ? loadItems(transaction.id) : []),
@@ -184,7 +176,7 @@ function TransactionSheet({
           <button
             disabled={!data}
             onClick={() => data && onReceipt(data)}
-            className="rounded-xl border border-border bg-card py-2.5 text-sm font-semibold disabled:opacity-50"
+            className="rounded-xl border border-border bg-card py-2.5 text-sm font-semibold disabled:opacity-50 hover:bg-accent/40"
           >
             Struk / Kirim
           </button>

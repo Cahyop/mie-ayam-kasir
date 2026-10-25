@@ -50,9 +50,7 @@ export async function unregisterAppServiceWorker(): Promise<void> {
     const registrations = await navigator.serviceWorker.getRegistrations();
     await Promise.all(
       registrations
-        .filter((registration) =>
-          registration.active?.scriptURL.endsWith("/sw.js"),
-        )
+        .filter((registration) => registration.active?.scriptURL.endsWith("/sw.js"))
         .map((registration) => registration.unregister()),
     );
   } catch {

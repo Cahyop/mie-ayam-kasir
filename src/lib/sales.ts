@@ -26,8 +26,7 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   const discount = Math.max(0, input.discount || 0);
   const total = Math.max(0, subtotal - discount);
   const paid = input.paidAmount;
-  const change =
-    input.paymentMethod === "cash" ? Math.max(0, paid - total) : 0;
+  const change = input.paymentMethod === "cash" ? Math.max(0, paid - total) : 0;
 
   const transaction: Transaction = {
     id: uid(),
@@ -67,7 +66,10 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
     if (newStock !== product.stock) stockUpdates.push({ id: product.id, stock: newStock });
   }
 
-  const outboxEntries: { table: "transactions" | "transaction_items" | "products"; row: Record<string, unknown> }[] = [
+  const outboxEntries: {
+    table: "transactions" | "transaction_items" | "products";
+    row: Record<string, unknown>;
+  }[] = [
     { table: "transactions", row: { ...transaction } },
     ...items.map((item) => ({ table: "transaction_items" as const, row: { ...item } })),
     ...stockUpdates.map((update) => ({ table: "products" as const, row: update })),

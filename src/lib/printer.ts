@@ -37,10 +37,7 @@ function savePrinterName(name: string | null) {
   }
 }
 
-async function writeChunks(
-  characteristic: BluetoothRemoteGATTCharacteristic,
-  bytes: Uint8Array,
-) {
+async function writeChunks(characteristic: BluetoothRemoteGATTCharacteristic, bytes: Uint8Array) {
   const CHUNK = 180;
   for (let i = 0; i < bytes.length; i += CHUNK) {
     await characteristic.writeValue(bytes.slice(i, i + CHUNK));
