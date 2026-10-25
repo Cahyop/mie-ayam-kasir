@@ -85,6 +85,7 @@ export function RiwayatPage() {
       paidAmount: t.paid_amount,
       changeAmount: t.change_amount,
       customerName: customer?.name ?? null,
+      orderType: t.order_type ?? "dine_in",
     } satisfies ReceiptData;
   }
 
@@ -238,7 +239,20 @@ export function RiwayatPage() {
                       className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
                     >
                       <div>
-                        <p className="text-xs font-bold text-foreground">{t.receipt_no}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-bold text-foreground">{t.receipt_no}</p>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] px-1.5 py-0 h-4 font-normal",
+                              t.order_type === "take_away"
+                                ? "border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                                : "border-primary/30 text-primary bg-primary/10",
+                            )}
+                          >
+                            {t.order_type === "take_away" ? "Bungkus" : "Makan di Tempat"}
+                          </Badge>
+                        </div>
                         <p className="text-[11px] text-muted-foreground">
                           {formatTimeId(t.created_at)}
                         </p>
@@ -287,7 +301,20 @@ export function RiwayatPage() {
                 className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
               >
                 <div>
-                  <p className="text-xs font-bold text-foreground">{t.receipt_no}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-bold text-foreground">{t.receipt_no}</p>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 h-4 font-normal",
+                        t.order_type === "take_away"
+                          ? "border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                          : "border-primary/30 text-primary bg-primary/10",
+                      )}
+                    >
+                      {t.order_type === "take_away" ? "Bungkus" : "Makan di Tempat"}
+                    </Badge>
+                  </div>
                   <p className="text-[11px] text-muted-foreground">
                     {formatDateId(t.created_at)} · {formatTimeId(t.created_at)}
                   </p>
@@ -373,7 +400,20 @@ function TransactionSheet({
     <Sheet open={!!transaction} onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-3xl px-4">
         <SheetHeader>
-          <SheetTitle>{transaction.receipt_no}</SheetTitle>
+          <div className="flex items-center justify-between pr-6">
+            <SheetTitle>{transaction.receipt_no}</SheetTitle>
+            <Badge
+              variant="outline"
+              className={cn(
+                "text-xs px-2 py-0.5 font-medium",
+                transaction.order_type === "take_away"
+                  ? "border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                  : "border-primary/30 text-primary bg-primary/10",
+              )}
+            >
+              {transaction.order_type === "take_away" ? "Bungkus" : "Makan di Tempat"}
+            </Badge>
+          </div>
         </SheetHeader>
         <div className="space-y-1 pb-2 text-sm mt-3">
           {items?.map((item) => (

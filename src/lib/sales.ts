@@ -1,7 +1,14 @@
 import { db, getMeta } from "./db";
 import { enqueueDelete, enqueueUpsert, getUserId } from "./sync";
 import { makeReceiptNo, uid } from "./format";
-import type { CartItem, PaymentMethod, RegisterShift, Transaction, TransactionItem } from "./types";
+import type {
+  CartItem,
+  OrderType,
+  PaymentMethod,
+  RegisterShift,
+  Transaction,
+  TransactionItem,
+} from "./types";
 
 export type CheckoutInput = {
   cart: CartItem[];
@@ -10,6 +17,7 @@ export type CheckoutInput = {
   discount: number;
   customerId: string | null;
   note: string | null;
+  orderType?: OrderType;
 };
 
 export type CheckoutResult = {
@@ -86,6 +94,7 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
     created_at: now,
     updated_at: now,
     shift_id: shiftId,
+    order_type: input.orderType || "dine_in",
   };
 
   const items: TransactionItem[] = input.cart.map((item) => ({

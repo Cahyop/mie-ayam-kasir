@@ -22,6 +22,7 @@ export type Customer = {
 };
 
 export type PaymentMethod = "cash" | "qris";
+export type OrderType = "dine_in" | "take_away";
 
 export type Transaction = {
   id: string;
@@ -38,6 +39,7 @@ export type Transaction = {
   created_at: string;
   updated_at: string;
   shift_id?: string | null;
+  order_type?: OrderType;
 };
 
 export type TransactionItem = {
@@ -98,6 +100,7 @@ export type ReceiptData = {
   paidAmount: number;
   changeAmount: number;
   customerName?: string | null;
+  orderType?: OrderType;
 };
 
 export type OutboxTable =

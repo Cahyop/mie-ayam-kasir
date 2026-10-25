@@ -92,12 +92,27 @@ describe("Receipt and format helpers", () => {
     const waText = buildWaText(dummyReceipt);
     expect(waText).toContain("*Mie Ayam Berkah*");
     expect(waText).toContain("TX-20261025-001");
+    expect(waText).toContain("Pesanan: Makan di Tempat");
     expect(waText).toContain("Pelanggan: Mas Joko");
     expect(waText).toContain("2x Mie Ayam Pangsit");
     expect(waText).toContain("Subtotal: Rp 40.000");
     expect(waText).toContain("Diskon: Rp 5.000");
     expect(waText).toContain("*Total: Rp 35.000*");
     expect(waText).toContain("Kembalian: Rp 15.000");
+  });
+
+  it("displays order type (Makan di Tempat / Bungkus) on receipt and WhatsApp text", () => {
+    const dineInLines = buildReceiptLines({ ...dummyReceipt, orderType: "dine_in" }, "58");
+    expect(dineInLines.map((l) => l.text)).toContain("[ MAKAN DI TEMPAT ]");
+
+    const dineInWa = buildWaText({ ...dummyReceipt, orderType: "dine_in" });
+    expect(dineInWa).toContain("Pesanan: Makan di Tempat");
+
+    const takeAwayLines = buildReceiptLines({ ...dummyReceipt, orderType: "take_away" }, "58");
+    expect(takeAwayLines.map((l) => l.text)).toContain("[ BUNGKUS ]");
+
+    const takeAwayWa = buildWaText({ ...dummyReceipt, orderType: "take_away" });
+    expect(takeAwayWa).toContain("Pesanan: Bungkus");
   });
 
   it("builds correct WhatsApp href with Indonesian phone normalization", () => {

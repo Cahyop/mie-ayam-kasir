@@ -41,6 +41,9 @@ export function buildReceiptLines(data: ReceiptData, paperWidth: "58" | "80"): R
   const timeStr = dt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
   push({ text: twoCol(`No: ${data.receiptNo}`, timeStr, cols) });
 
+  const orderLabel = data.orderType === "take_away" ? "BUNGKUS" : "MAKAN DI TEMPAT";
+  push({ text: `[ ${orderLabel} ]`, align: "center", bold: true });
+
   if (data.customerName) push({ text: `Pelanggan: ${data.customerName}` });
   push({ text: rule(cols) });
 
@@ -86,6 +89,8 @@ export function buildWaText(data: ReceiptData): string {
   const out: string[] = [];
   out.push(`*${data.storeName}*`);
   out.push(`Struk: ${data.receiptNo} • ${timeStr}`);
+  const orderLabelWa = data.orderType === "take_away" ? "Bungkus" : "Makan di Tempat";
+  out.push(`Pesanan: ${orderLabelWa}`);
   if (data.customerName) out.push(`Pelanggan: ${data.customerName}`);
   out.push("──────────────");
   for (const item of data.items) {

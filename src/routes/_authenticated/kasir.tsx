@@ -6,7 +6,7 @@ import { enqueueUpsert, getUserId } from "@/lib/sync";
 import { checkout } from "@/lib/sales";
 import { formatRupiah, formatPlain, parseNumberInput, uid } from "@/lib/format";
 import { getActiveShift, openShift } from "@/lib/shift";
-import type { CartItem, Customer, ReceiptData } from "@/lib/types";
+import type { CartItem, Customer, OrderType, ReceiptData } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +33,8 @@ import {
   SunMedium,
   Clock,
   Loader2,
+  Utensils,
+  ShoppingBag,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -79,6 +81,7 @@ function KasirPage() {
   const [cartOpen, setCartOpen] = useState(false);
   const [discount, setDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "qris">("cash");
+  const [orderType, setOrderType] = useState<OrderType>("dine_in");
   const [paidAmount, setPaidAmount] = useState(0);
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
@@ -186,6 +189,7 @@ function KasirPage() {
         discount,
         customerId,
         note: null,
+        orderType,
       });
       const data: ReceiptData = {
         receiptNo: result.transaction.receipt_no,
@@ -207,6 +211,7 @@ function KasirPage() {
         paidAmount: result.transaction.paid_amount,
         changeAmount: result.transaction.change_amount,
         customerName: customer?.name ?? null,
+        orderType: result.transaction.order_type,
       };
       setReceipt(data);
       setCart([]);
@@ -214,6 +219,7 @@ function KasirPage() {
       setDiscount(0);
       setPaidAmount(0);
       setCustomerId(null);
+      setOrderType("dine_in");
     } catch (error) {
       console.error(error);
       toast.error("Gagal memproses pembayaran");
@@ -449,6 +455,31 @@ function KasirPage() {
           </div>
 
           <div className="mt-4 space-y-3 border-t border-border pt-4">
+            {/* Pilihan Jenis Pesanan */}
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Tipe Pesanan</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={orderType === "dine_in" ? "default" : "outline"}
+                  onClick={() => setOrderType("dine_in")}
+                  className="w-full gap-1.5 text-xs font-semibold"
+                >
+                  <Utensils className="h-3.5 w-3.5" />
+                  Makan di Tempat
+                </Button>
+                <Button
+                  type="button"
+                  variant={orderType === "take_away" ? "default" : "outline"}
+                  onClick={() => setOrderType("take_away")}
+                  className="w-full gap-1.5 text-xs font-semibold"
+                >
+                  <ShoppingBag className="h-3.5 w-3.5" />
+                  Bungkus
+                </Button>
+              </div>
+            </div>
+
             {/* Customer Picker with Quick Add Button */}
             <div className="space-y-1">
               <div className="flex items-center justify-between">
