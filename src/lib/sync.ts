@@ -358,6 +358,37 @@ export async function syncNow(): Promise<void> {
     for (const table of SYNC_TABLES) {
       await pullTable(table);
     }
+
+    // Jika data transaksi di Supabase cloud sudah kosong (direset dari perangkat lain),
+    // bersihkan juga data transaksi lokal agar perangkat ini ikut bersih
+    if (currentUserId) {
+      try {
+        const { count: serverTxCount, error: txCountErr } = await supabase
+          .from("transactions")
+          .select("*", { count: "exact", head: true });
+        if (!txCountErr && serverTxCount === 0 && (await db.transactions.count()) > 0) {
+          const now = new Date().toISOString();
+          await Promise.all([
+            db.transactions.clear(),
+            db.transaction_items.clear(),
+            db.cash_flows.clear(),
+            db.draft_orders.clear(),
+            db.meta.delete("active_shift"),
+            db.meta.delete("shift_history"),
+            db.meta.put({ key: "lastPull:transactions", value: now }),
+            db.meta.put({ key: "lastPull:transaction_items", value: now }),
+            db.meta.put({ key: "lastPull:cash_flows", value: now }),
+          ]);
+          if (typeof window !== "undefined" && window.localStorage) {
+            localStorage.removeItem("pos_active_shift");
+            localStorage.removeItem("pos_shift_history");
+            localStorage.removeItem("pos_draft_orders");
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
     lastError = null;
     setStatus(navigator.onLine ? "idle" : "offline");
   } catch (error) {

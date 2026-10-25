@@ -64,7 +64,7 @@ async function tryRecoverShift(): Promise<RegisterShift | null> {
       if (!modalClosed) {
         const userId = latestModal.user_id || getUserId() || "anonymous";
         return {
-          id: uid(),
+          id: `shift-modal-${latestModal.id}`,
           user_id: userId,
           date: toLocalDateIso(latestModal.occurred_at),
           status: "open",
@@ -97,7 +97,7 @@ async function tryRecoverShift(): Promise<RegisterShift | null> {
         // Ada transaksi hari ini yang belum ditutup -> SHIFT AKTIF!
         const userId = latestTx.user_id || getUserId() || "anonymous";
         return {
-          id: uid(),
+          id: `shift-tx-${today}`,
           user_id: userId,
           date: today,
           status: "open",

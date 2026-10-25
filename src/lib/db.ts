@@ -57,6 +57,24 @@ export async function setMeta(key: string, value: unknown): Promise<void> {
 }
 
 export async function resetTransactionData(): Promise<void> {
+  const now = new Date().toISOString();
+
+  // 1. Hapus dari Supabase Cloud jika akun sedang login
+  try {
+    const { supabase } = await import("@/integrations/supabase/client");
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user?.id) {
+      await supabase.from("transaction_items").delete().eq("user_id", user.id);
+      await supabase.from("transactions").delete().eq("user_id", user.id);
+      await supabase.from("cash_flows").delete().eq("user_id", user.id);
+    }
+  } catch (err) {
+    console.warn("Gagal menghapus data transaksi dari Supabase cloud:", err);
+  }
+
+  // 2. Hapus dari IndexedDB lokal dan perbarui kursor sinkronisasi
   await Promise.all([
     db.transactions.clear(),
     db.transaction_items.clear(),
@@ -64,7 +82,12 @@ export async function resetTransactionData(): Promise<void> {
     db.draft_orders.clear(),
     db.meta.delete("active_shift"),
     db.meta.delete("shift_history"),
+    db.meta.put({ key: "lastPull:transactions", value: now }),
+    db.meta.put({ key: "lastPull:transaction_items", value: now }),
+    db.meta.put({ key: "lastPull:cash_flows", value: now }),
   ]);
+
+  // 3. Bersihkan cache di localStorage
   if (typeof window !== "undefined" && window.localStorage) {
     try {
       localStorage.removeItem("pos_active_shift");
@@ -74,6 +97,8 @@ export async function resetTransactionData(): Promise<void> {
       // ignore
     }
   }
+
+  // 4. Bersihkan antrean outbox terkait
   try {
     await db.outbox
       .filter((entry) => ["transactions", "transaction_items", "cash_flows"].includes(entry.table))
