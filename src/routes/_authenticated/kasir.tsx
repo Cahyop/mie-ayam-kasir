@@ -153,50 +153,26 @@ function KasirPage() {
     );
   }
 
-  function splitOrToggleItem(itemIndex: number) {
+  function toggleItemOrderType(itemIndex: number) {
     setCart((prev) => {
       const target = prev[itemIndex];
       if (!target) return prev;
       const currentType = target.order_type || "dine_in";
       const newType: ItemOrderType = currentType === "take_away" ? "dine_in" : "take_away";
 
-      if (target.qty <= 1) {
-        // Single item: merge if other type already exists in cart, otherwise just flip type
-        const existingOther = prev.findIndex(
-          (item, i) =>
-            i !== itemIndex &&
-            item.product_id === target.product_id &&
-            (item.order_type || "dine_in") === newType,
-        );
-        if (existingOther > -1) {
-          return prev
-            .map((item, i) => (i === existingOther ? { ...item, qty: item.qty + 1 } : item))
-            .filter((_, i) => i !== itemIndex);
-        }
-        return prev.map((item, i) => (i === itemIndex ? { ...item, order_type: newType } : item));
-      }
-
-      // Multiple portions: move 1 portion to newType
+      // If item with newType already exists in cart, merge quantities
       const existingOther = prev.findIndex(
-        (item) =>
-          item.product_id === target.product_id && (item.order_type || "dine_in") === newType,
+        (item, i) =>
+          i !== itemIndex &&
+          item.product_id === target.product_id &&
+          (item.order_type || "dine_in") === newType,
       );
       if (existingOther > -1) {
-        return prev.map((item, i) => {
-          if (i === itemIndex) return { ...item, qty: item.qty - 1 };
-          if (i === existingOther) return { ...item, qty: item.qty + 1 };
-          return item;
-        });
+        return prev
+          .map((item, i) => (i === existingOther ? { ...item, qty: item.qty + target.qty } : item))
+          .filter((_, i) => i !== itemIndex);
       }
-      const newCart = prev.map((item, i) =>
-        i === itemIndex ? { ...item, qty: item.qty - 1 } : item,
-      );
-      newCart.splice(itemIndex + 1, 0, {
-        ...target,
-        qty: 1,
-        order_type: newType,
-      });
-      return newCart;
+      return prev.map((item, i) => (i === itemIndex ? { ...item, order_type: newType } : item));
     });
   }
 
@@ -205,7 +181,16 @@ function KasirPage() {
     setCart((prev) => {
       if (prev.length === 0) return prev;
       const targetType: ItemOrderType = type === "take_away" ? "take_away" : "dine_in";
-      return prev.map((item) => ({ ...item, order_type: targetType }));
+      const merged: CartItem[] = [];
+      for (const item of prev) {
+        const existing = merged.find((m) => m.product_id === item.product_id);
+        if (existing) {
+          existing.qty += item.qty;
+        } else {
+          merged.push({ ...item, order_type: targetType });
+        }
+      }
+      return merged;
     });
   }
 
@@ -416,6 +401,30 @@ function KasirPage() {
         </Button>
       </div>
 
+      {/* Tipe Pesanan Kasir (Default: Makan di Tempat) */}
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={orderType === "dine_in" ? "default" : "outline"}
+          onClick={() => setOrderType("dine_in")}
+          className="h-8 gap-1.5 text-xs font-semibold"
+        >
+          <Utensils className="h-3.5 w-3.5" />
+          Makan di Tempat
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={orderType === "take_away" ? "default" : "outline"}
+          onClick={() => setOrderType("take_away")}
+          className="h-8 gap-1.5 text-xs font-semibold"
+        >
+          <ShoppingBag className="h-3.5 w-3.5" />
+          Bungkus
+        </Button>
+      </div>
+
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -497,9 +506,9 @@ function KasirPage() {
                     <p className="text-sm font-semibold">{item.name}</p>
                     <button
                       type="button"
-                      onClick={() => splitOrToggleItem(idx)}
+                      onClick={() => toggleItemOrderType(idx)}
                       className={cn(
-                        "text-[10px] px-1.5 py-0.5 rounded-md font-semibold border transition-all inline-flex items-center gap-1",
+                        "text-[10px] px-2 py-0.5 rounded-full font-medium border transition-colors inline-flex items-center gap-1",
                         item.order_type === "take_away"
                           ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
                           : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20",
@@ -514,19 +523,10 @@ function KasirPage() {
                       ) : (
                         <>
                           <Utensils className="h-2.5 w-2.5" />
-                          Makan Sini
+                          Makan di Tempat
                         </>
                       )}
                     </button>
-                    {item.qty > 1 && (item.order_type || "dine_in") === "dine_in" && (
-                      <button
-                        type="button"
-                        onClick={() => splitOrToggleItem(idx)}
-                        className="text-[10px] text-amber-700 dark:text-amber-400 hover:underline font-medium"
-                      >
-                        + Bungkus 1
-                      </button>
-                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">{formatRupiah(item.price)}</p>
                 </div>
