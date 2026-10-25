@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReceiptData } from "@/lib/types";
 import {
   Dialog,
@@ -10,7 +10,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { bluetoothPrintingSupported, printViaBluetooth } from "@/lib/printer";
+import {
+  bluetoothPrintingSupported,
+  printViaBluetooth,
+  isPrinterConnected,
+  subscribePrinterStatus,
+} from "@/lib/printer";
 import {
   buildReceiptLines,
   buildWaText,
@@ -34,6 +39,13 @@ export function ReceiptDialog({ receipt, onClose, paperWidth = "58" }: ReceiptDi
   const [sharing, setSharing] = useState(false);
   const [waPhone, setWaPhone] = useState("");
   const [showPhoneInput, setShowPhoneInput] = useState(false);
+  const [printerConnected, setPrinterConnected] = useState(isPrinterConnected());
+
+  useEffect(() => {
+    return subscribePrinterStatus((connected) => {
+      setPrinterConnected(connected);
+    });
+  }, []);
 
   if (!receipt) return null;
 
@@ -128,9 +140,9 @@ export function ReceiptDialog({ receipt, onClose, paperWidth = "58" }: ReceiptDi
                   line.align === "center" ? "text-center" : "text-left"
                 } ${line.bold ? "font-bold text-foreground" : "text-foreground/90"} ${
                   line.large
-                    ? "text-base font-black my-1"
+                    ? "my-1 text-base font-black"
                     : line.doubleHeight
-                      ? "text-sm font-black my-0.5 text-primary"
+                      ? "my-0.5 text-sm font-black text-primary"
                       : "text-xs"
                 } ${line.gapAfter ? "mb-1.5" : ""}`}
               >
@@ -176,10 +188,12 @@ export function ReceiptDialog({ receipt, onClose, paperWidth = "58" }: ReceiptDi
           >
             {printing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : printerConnected ? (
+              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
             ) : (
               <Printer className="h-4 w-4" />
             )}
-            Cetak Bluetooth
+            {printerConnected ? "Cetak (Terhubung)" : "Cetak Bluetooth"}
           </Button>
 
           <Button variant="outline" className="w-full gap-2 text-xs" onClick={handleBrowserPrint}>

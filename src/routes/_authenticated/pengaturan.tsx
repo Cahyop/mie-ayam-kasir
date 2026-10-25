@@ -3,12 +3,23 @@ import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { enqueueUpsert, getUserId, syncNow } from "@/lib/sync";
-import { bluetoothPrintingSupported, connectPrinter, getSavedPrinterName } from "@/lib/printer";
+import {
+  bluetoothPrintingSupported,
+  connectPrinter,
+  disconnectPrinter,
+  getSavedPrinterName,
+  isPrinterConnected,
+  isKeepConnectedEnabled,
+  setKeepConnectedEnabled,
+  subscribePrinterStatus,
+  printViaBluetooth,
+} from "@/lib/printer";
 import type { Settings } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Store,
@@ -46,9 +57,14 @@ export function PengaturanPage() {
   const [receiptFooter, setReceiptFooter] = useState("Terima kasih atas kunjungan Anda!");
   const [paperWidth, setPaperWidth] = useState<"58" | "80">("58");
 
-  // Printer & Sync states
+  // Printer states
   const [printerName, setPrinterName] = useState<string | null>(getSavedPrinterName());
+  const [printerConnected, setPrinterConnected] = useState(isPrinterConnected());
+  const [keepConnected, setKeepConnected] = useState(isKeepConnectedEnabled());
   const [connectingPrinter, setConnectingPrinter] = useState(false);
+  const [testPrinting, setTestPrinting] = useState(false);
+
+  // Sync states
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -67,6 +83,13 @@ export function PengaturanPage() {
       setPaperWidth(settings.paper_width ?? "58");
     }
   }, [settings]);
+
+  useEffect(() => {
+    return subscribePrinterStatus((connected, name) => {
+      setPrinterConnected(connected);
+      if (name) setPrinterName(name);
+    });
+  }, []);
 
   async function handleSaveSettings(e?: React.FormEvent) {
     if (e) e.preventDefault();
@@ -89,7 +112,7 @@ export function PengaturanPage() {
       await db.settings.put(row);
       await enqueueUpsert("settings", row);
       toast.success("Pengaturan berhasil disimpan");
-    } catch (err) {
+    } catch {
       toast.error("Gagal menyimpan pengaturan");
     } finally {
       setSaving(false);
@@ -103,8 +126,9 @@ export function PengaturanPage() {
     }
     setConnectingPrinter(true);
     try {
-      const conn = await connectPrinter();
+      const conn = await connectPrinter(true);
       setPrinterName(conn.deviceName);
+      setPrinterConnected(true);
       toast.success(`Terhubung ke printer ${conn.deviceName}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -113,6 +137,47 @@ export function PengaturanPage() {
       }
     } finally {
       setConnectingPrinter(false);
+    }
+  }
+
+  function handleToggleKeepConnected(val: boolean) {
+    setKeepConnected(val);
+    setKeepConnectedEnabled(val);
+    toast.success(
+      val
+        ? "Mode Konek Terus diaktifkan (siap cetak instan)"
+        : "Mode Konek Terus dinonaktifkan (koneksi ditutup setelah cetak)",
+    );
+  }
+
+  async function handleTestPrint() {
+    setTestPrinting(true);
+    try {
+      await printViaBluetooth(
+        {
+          receiptNo: "TEST-PRINT",
+          createdAt: new Date().toISOString(),
+          storeName: storeName || "Mie Ayam",
+          storeAddress: storeAddress || null,
+          storePhone: storePhone || null,
+          footer: "Tes Cetak Bluetooth Berhasil!",
+          items: [{ name: "Mie Ayam (Tes Cetak)", qty: 1, price: 15000, total: 15000 }],
+          subtotal: 15000,
+          discount: 0,
+          total: 15000,
+          paymentMethod: "cash",
+          paidAmount: 15000,
+          changeAmount: 0,
+          customerName: "Tes Printer",
+        },
+        paperWidth,
+      );
+      toast.success("Tes cetak berhasil!");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Gagal tes cetak: ${msg}`);
+    } finally {
+      setTestPrinting(false);
     }
   }
 
@@ -206,7 +271,7 @@ export function PengaturanPage() {
         </form>
       </section>
 
-      {/* Printer Bluetooth */}
+      {/* Printer Bluetooth Settings */}
       <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between border-b border-border pb-2 text-sm font-semibold">
           <div className="flex items-center gap-2">
@@ -215,7 +280,7 @@ export function PengaturanPage() {
           </div>
           {bluetoothPrintingSupported() ? (
             <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
-              <CheckCircle2 className="h-3 w-3" /> Didukung
+              <CheckCircle2 className="h-3 w-3" /> Web Bluetooth Aktif
             </span>
           ) : (
             <span className="flex items-center gap-1 text-[11px] font-medium text-amber-600">
@@ -225,31 +290,108 @@ export function PengaturanPage() {
         </div>
 
         <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Hubungkan printer kasir mini thermal Bluetooth (ESC/POS) untuk cetak struk langsung
-            tanpa kabel.
-          </p>
+          {/* Status Bar */}
           <div className="flex items-center justify-between rounded-xl bg-muted/50 p-3">
             <div>
-              <p className="text-xs font-semibold">Status Printer</p>
-              <p className="text-xs text-muted-foreground">
-                {printerName ? `Tersimpan: ${printerName}` : "Belum terpasang"}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`h-2.5 w-2.5 rounded-full ${
+                    printerConnected
+                      ? "bg-emerald-500 animate-pulse"
+                      : printerName
+                        ? "bg-amber-400"
+                        : "bg-muted-foreground/40"
+                  }`}
+                />
+                <p className="text-xs font-bold">
+                  {printerConnected
+                    ? `Terhubung: ${printerName || "Printer Bluetooth"}`
+                    : printerName
+                      ? `Tersimpan (Belum Konek): ${printerName}`
+                      : "Belum Ada Printer Terhubung"}
+                </p>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {printerConnected
+                  ? "Koneksi aktif dan siap mencetak struk instan"
+                  : "Tekan Hubungkan untuk menyambungkan"}
               </p>
             </div>
+
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                variant={printerConnected ? "outline" : "default"}
+                onClick={handleConnectBluetooth}
+                disabled={connectingPrinter}
+                className="gap-1.5 text-xs"
+              >
+                {connectingPrinter ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Printer className="h-3.5 w-3.5" />
+                )}
+                {printerConnected ? "Ganti" : "Hubungkan"}
+              </Button>
+              {printerConnected && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    disconnectPrinter();
+                    toast.info("Printer diputuskan");
+                  }}
+                  className="text-xs text-destructive hover:text-destructive"
+                >
+                  Putuskan
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Setting: Jaga Printer Tetap Terhubung (Konek Terus) */}
+          <div className="flex items-center justify-between rounded-xl border border-border p-3">
+            <div className="space-y-0.5 pr-2">
+              <Label htmlFor="keep-connected" className="text-xs font-semibold cursor-pointer">
+                Jaga printer tetap terhubung (Konek Terus)
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                Koneksi Bluetooth tidak akan diputus setelah cetak, sehingga cetak struk berikutnya
+                langsung keluar instan tanpa pop-up pairing.
+              </p>
+            </div>
+            <Switch
+              id="keep-connected"
+              checked={keepConnected}
+              onCheckedChange={handleToggleKeepConnected}
+            />
+          </div>
+
+          {/* Test Print Button */}
+          {printerConnected && (
             <Button
-              size="sm"
               variant="outline"
-              onClick={handleConnectBluetooth}
-              disabled={connectingPrinter}
-              className="gap-1.5 text-xs"
+              size="sm"
+              onClick={handleTestPrint}
+              disabled={testPrinting}
+              className="w-full gap-2 text-xs"
             >
-              {connectingPrinter ? (
+              {testPrinting ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Printer className="h-3.5 w-3.5" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
               )}
-              {printerName ? "Ganti Printer" : "Cari Printer"}
+              Tes Cetak Struk Singkat
             </Button>
+          )}
+
+          {/* Panduan Singkat */}
+          <div className="rounded-xl bg-amber-500/10 p-2.5 text-[11px] text-amber-800 dark:text-amber-300">
+            <p className="font-semibold mb-0.5">💡 Tips koneksi Bluetooth:</p>
+            <p>
+              Pastikan Bluetooth HP/laptop menyala dan printer thermal dalam posisi ON. Jika
+              menggunakan Google Chrome di HP Android, izinkan akses "Perangkat di sekitar".
+            </p>
           </div>
         </div>
       </section>
