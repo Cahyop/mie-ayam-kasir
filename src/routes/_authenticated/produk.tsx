@@ -50,14 +50,70 @@ const emptyDraft: Draft = {
 };
 
 const SAMPLE_PRODUCTS = [
-  { name: "Mie Ayam Biasa", category: "Makanan", price: 15000, stock: 50, track_stock: false, active: true },
-  { name: "Mie Ayam Bakso", category: "Makanan", price: 20000, stock: 50, track_stock: false, active: true },
-  { name: "Mie Ayam Pangsit", category: "Makanan", price: 18000, stock: 50, track_stock: false, active: true },
-  { name: "Mie Ayam Komplit", category: "Makanan", price: 24000, stock: 50, track_stock: false, active: true },
-  { name: "Bakso Kuah (Porsi)", category: "Makanan", price: 15000, stock: 30, track_stock: false, active: true },
-  { name: "Pangsit Goreng", category: "Tambahan", price: 3000, stock: 100, track_stock: false, active: true },
-  { name: "Es Teh Manis", category: "Minuman", price: 5000, stock: 100, track_stock: false, active: true },
-  { name: "Es Jeruk", category: "Minuman", price: 7000, stock: 100, track_stock: false, active: true },
+  {
+    name: "Mie Ayam Biasa",
+    category: "Makanan",
+    price: 15000,
+    stock: 50,
+    track_stock: false,
+    active: true,
+  },
+  {
+    name: "Mie Ayam Bakso",
+    category: "Makanan",
+    price: 20000,
+    stock: 50,
+    track_stock: false,
+    active: true,
+  },
+  {
+    name: "Mie Ayam Pangsit",
+    category: "Makanan",
+    price: 18000,
+    stock: 50,
+    track_stock: false,
+    active: true,
+  },
+  {
+    name: "Mie Ayam Komplit",
+    category: "Makanan",
+    price: 24000,
+    stock: 50,
+    track_stock: false,
+    active: true,
+  },
+  {
+    name: "Bakso Kuah (Porsi)",
+    category: "Makanan",
+    price: 15000,
+    stock: 30,
+    track_stock: false,
+    active: true,
+  },
+  {
+    name: "Pangsit Goreng",
+    category: "Tambahan",
+    price: 3000,
+    stock: 100,
+    track_stock: false,
+    active: true,
+  },
+  {
+    name: "Es Teh Manis",
+    category: "Minuman",
+    price: 5000,
+    stock: 100,
+    track_stock: false,
+    active: true,
+  },
+  {
+    name: "Es Jeruk",
+    category: "Minuman",
+    price: 7000,
+    stock: 100,
+    track_stock: false,
+    active: true,
+  },
 ];
 
 function ProdukPage() {
@@ -82,7 +138,9 @@ function ProdukPage() {
   async function resolveUserId(): Promise<string> {
     const current = getUserId();
     if (current) return current;
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     return user?.id ?? "anonymous";
   }
 

@@ -10,12 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -93,7 +88,9 @@ function PelangganPage() {
   async function resolveUserId(): Promise<string> {
     const current = getUserId();
     if (current) return current;
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     return user?.id ?? "anonymous";
   }
 
@@ -272,9 +269,7 @@ function PelangganPage() {
       <Dialog open={!!draft} onOpenChange={(o) => !o && setDraft(null)}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
-            <DialogTitle>
-              {draft?.id ? "Edit Pelanggan" : "Tambah Pelanggan Baru"}
-            </DialogTitle>
+            <DialogTitle>{draft?.id ? "Edit Pelanggan" : "Tambah Pelanggan Baru"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
@@ -312,16 +307,13 @@ function PelangganPage() {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={(o) => !o && setDeleteTarget(null)}
-      >
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Pelanggan?</AlertDialogTitle>
             <AlertDialogDescription>
-              Data pelanggan "{deleteTarget?.name}" akan dihapus dari daftar. Transaksi yang
-              sudah dicatat sebelumnya tidak akan terpengaruh.
+              Data pelanggan "{deleteTarget?.name}" akan dihapus dari daftar. Transaksi yang sudah
+              dicatat sebelumnya tidak akan terpengaruh.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

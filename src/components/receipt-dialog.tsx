@@ -63,7 +63,7 @@ export function ReceiptDialog({ receipt, onClose, paperWidth = "58" }: ReceiptDi
     if (!receipt) return;
     try {
       printBrowserReceipt(receipt, paperWidth);
-    } catch (err: unknown) {
+    } catch {
       toast.error("Gagal membuka jendela cetak.");
     }
   }
@@ -111,24 +111,28 @@ export function ReceiptDialog({ receipt, onClose, paperWidth = "58" }: ReceiptDi
 
   return (
     <Dialog open={!!receipt} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto rounded-3xl p-5">
+      <DialogContent className="max-h-[92vh] max-w-md overflow-y-auto rounded-3xl p-5">
         <DialogHeader>
           <DialogTitle className="text-center text-base font-bold">
             Struk: {receipt.receiptNo}
           </DialogTitle>
         </DialogHeader>
 
-        {/* Thermal receipt paper preview */}
-        <div className="my-2 rounded-2xl border border-dashed border-border bg-muted/40 p-4 font-mono text-xs leading-relaxed shadow-inner">
+        {/* Thermal receipt paper preview - optimized clarity & size */}
+        <div className="my-2 rounded-2xl border border-dashed border-border bg-card p-4 font-mono shadow-sm">
           <div className="space-y-0.5">
             {lines.map((line, idx) => (
               <div
                 key={idx}
-                className={`whitespace-pre ${
+                className={`whitespace-pre tracking-wide ${
                   line.align === "center" ? "text-center" : "text-left"
                 } ${line.bold ? "font-bold text-foreground" : "text-foreground/90"} ${
-                  line.large ? "text-sm font-black" : ""
-                } ${line.gapAfter ? "mb-2" : ""}`}
+                  line.large
+                    ? "text-base font-black my-1"
+                    : line.doubleHeight
+                      ? "text-sm font-black my-0.5 text-primary"
+                      : "text-xs"
+                } ${line.gapAfter ? "mb-1.5" : ""}`}
               >
                 {line.text}
               </div>
