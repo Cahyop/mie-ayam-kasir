@@ -41,7 +41,10 @@ export function RiwayatPage() {
   );
   const shifts = useLiveQuery(() => getShiftHistory(), []);
   const settings = useLiveQuery(async () => (await db.settings.toArray())[0], []);
-  const customers = useLiveQuery(() => db.customers.toArray(), []);
+  const customers = useLiveQuery(
+    () => db.customers.filter((c) => c.name !== "__DRAFT_ORDER__").toArray(),
+    [],
+  );
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);

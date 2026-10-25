@@ -85,7 +85,10 @@ export function PengaturanPage() {
   // Statistics
   const productCount = useLiveQuery(() => db.products.count(), []);
   const txCount = useLiveQuery(() => db.transactions.count(), []);
-  const customerCount = useLiveQuery(() => db.customers.count(), []);
+  const customerCount = useLiveQuery(
+    () => db.customers.filter((c) => c.name !== "__DRAFT_ORDER__").count(),
+    [],
+  );
   const outboxCount = useLiveQuery(() => db.outbox.count(), []);
 
   useEffect(() => {

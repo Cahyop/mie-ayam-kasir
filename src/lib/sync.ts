@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { db, getMeta, setMeta, clearUserData } from "./db";
-import { SYNC_TABLES, type OutboxTable, type SyncStatus } from "./types";
+import { SYNC_TABLES, type OutboxTable, type SyncStatus, type DraftOrder } from "./types";
+import { initDraftsRealtime, pullDraftOrdersFromCloud } from "./drafts";
 
 const NUMERIC_FIELDS: Record<OutboxTable, string[]> = {
   products: ["price", "stock"],
@@ -138,6 +139,10 @@ export function getSyncState(): {
 
 export function getUserId(): string | null {
   return currentUserId;
+}
+
+export function setSyncUserId(id: string | null): void {
+  currentUserId = id;
 }
 
 function setStatus(next: SyncStatus) {
@@ -293,6 +298,18 @@ async function pullTable(table: OutboxTable): Promise<void> {
     }
     if (!data || data.length === 0) break;
     for (const raw of data) {
+      if (table === "customers" && raw.name === "__DRAFT_ORDER__") {
+        try {
+          await db.customers.delete(raw.id as string);
+          if (raw.note) {
+            const draft = JSON.parse(raw.note as string) as DraftOrder;
+            await db.draft_orders.put({ ...draft, cloud_synced: true });
+          }
+        } catch {
+          // ignore
+        }
+        continue;
+      }
       const row = normalizeRow(table, raw);
       const id = row.id as string;
       if (await isTombstoned(table, id)) continue;
@@ -358,6 +375,7 @@ export async function syncNow(): Promise<void> {
     for (const table of SYNC_TABLES) {
       await pullTable(table);
     }
+    await pullDraftOrdersFromCloud();
 
     // Jika data transaksi di Supabase cloud sudah kosong (direset dari perangkat lain),
     // bersihkan juga data transaksi lokal agar perangkat ini ikut bersih
@@ -414,6 +432,7 @@ async function handleUserSwitch(userId: string) {
     await clearUserData();
   }
   currentUserId = userId;
+  initDraftsRealtime(userId);
   await setMeta("lastUserId", userId);
   if (typeof window !== "undefined" && window.localStorage) {
     try {
@@ -450,6 +469,7 @@ export function initSync(): () => void {
       if (userId && userId !== currentUserId) {
         void handleUserSwitch(userId);
       } else if (userId) {
+        initDraftsRealtime(userId);
         scheduleSync(0);
       }
     }

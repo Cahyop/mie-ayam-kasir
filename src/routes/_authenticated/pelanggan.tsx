@@ -56,7 +56,9 @@ function PelangganPage() {
   const customers = useLiveQuery(async () => {
     try {
       const all = await db.customers.toArray();
-      return all.sort((a, b) => a.name.localeCompare(b.name, "id-ID"));
+      return all
+        .filter((c) => c.name !== "__DRAFT_ORDER__")
+        .sort((a, b) => a.name.localeCompare(b.name, "id-ID"));
     } catch {
       return [];
     }

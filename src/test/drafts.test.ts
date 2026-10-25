@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { db } from "../lib/db";
 import {
   saveDraftOrder,
@@ -6,9 +6,12 @@ import {
   getDraftOrder,
   getDraftOrders,
   formatTimeAgo,
+  pullDraftOrdersFromCloud,
 } from "../lib/drafts";
+import { setSyncUserId } from "../lib/sync";
+import { supabase } from "@/integrations/supabase/client";
 import { buildReceiptLines, buildWaText } from "../lib/receipt";
-import type { CartItem, ReceiptData } from "../lib/types";
+import type { CartItem, DraftOrder, ReceiptData } from "../lib/types";
 
 describe("Draft Orders (Pesanan Aktif)", () => {
   beforeEach(async () => {
@@ -130,5 +133,91 @@ describe("Draft Orders (Pesanan Aktif)", () => {
     expect(waText).toContain("*BILL SEMENTARA (BELUM LUNAS)*");
     expect(waText).toContain("Meja: Meja 2");
     expect(waText).toContain("Belum Lunas");
+  });
+
+  it("pullDraftOrdersFromCloud menarik pesanan pending dari cloud ke IndexedDB perangkat lain", async () => {
+    setSyncUserId("user-123");
+    const mockDraft: DraftOrder = {
+      id: "draft-cloud-1",
+      user_id: "user-123",
+      table_no: "Meja 4",
+      customer_name: "Pak Eko",
+      customer_id: null,
+      note: "Bungkus 1, Makan 1",
+      items: [
+        { product_id: "p1", name: "Mie Ayam", price: 15000, qty: 2, order_type: "dine_in" },
+      ],
+      order_type: "dine_in",
+      discount: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            id: mockDraft.id,
+            user_id: "user-123",
+            name: "__DRAFT_ORDER__",
+            phone: mockDraft.table_no,
+            note: JSON.stringify(mockDraft),
+            updated_at: mockDraft.updated_at,
+          },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    try {
+      const result = await pullDraftOrdersFromCloud();
+      expect(result.length).toBe(1);
+      expect(result[0].id).toBe("draft-cloud-1");
+      expect(result[0].table_no).toBe("Meja 4");
+
+      const inLocalDb = await db.draft_orders.get("draft-cloud-1");
+      expect(inLocalDb).toBeDefined();
+      expect(inLocalDb?.customer_name).toBe("Pak Eko");
+    } finally {
+      fetchSpy.mockRestore();
+      setSyncUserId(null);
+    }
+  });
+
+  it("pullDraftOrdersFromCloud membersihkan draft lokal jika sudah dibayar di perangkat lain", async () => {
+    setSyncUserId("user-123");
+    // Simulasikan perangkat ini punya draft yang sebelumnya disinkronkan
+    await db.draft_orders.put({
+      id: "draft-paid-elsewhere",
+      user_id: "user-123",
+      table_no: "Meja 9",
+      customer_name: null,
+      customer_id: null,
+      note: null,
+      items: [],
+      order_type: "dine_in",
+      discount: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      cloud_synced: true,
+    });
+
+    // Cloud sudah kosong (sudah dibayar / dibatalkan di device 2)
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    try {
+      await pullDraftOrdersFromCloud();
+
+      const localCheck = await db.draft_orders.get("draft-paid-elsewhere");
+      expect(localCheck).toBeUndefined();
+    } finally {
+      fetchSpy.mockRestore();
+      setSyncUserId(null);
+    }
   });
 });

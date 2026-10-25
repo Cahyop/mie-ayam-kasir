@@ -69,6 +69,7 @@ export async function resetTransactionData(): Promise<void> {
       await supabase.from("transaction_items").delete().eq("user_id", user.id);
       await supabase.from("transactions").delete().eq("user_id", user.id);
       await supabase.from("cash_flows").delete().eq("user_id", user.id);
+      await supabase.from("customers").delete().eq("user_id", user.id).eq("name", "__DRAFT_ORDER__");
     }
   } catch (err) {
     console.warn("Gagal menghapus data transaksi dari Supabase cloud:", err);

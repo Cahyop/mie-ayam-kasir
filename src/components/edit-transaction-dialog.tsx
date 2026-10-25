@@ -43,7 +43,11 @@ export function EditTransactionDialog({
     () =>
       db.customers
         .toArray()
-        .then((list) => list.sort((a, b) => a.name.localeCompare(b.name, "id-ID"))),
+        .then((list) =>
+          list
+            .filter((c) => c.name !== "__DRAFT_ORDER__")
+            .sort((a, b) => a.name.localeCompare(b.name, "id-ID")),
+        ),
     [],
   );
 

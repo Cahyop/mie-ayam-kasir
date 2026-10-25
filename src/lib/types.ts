@@ -100,6 +100,7 @@ export type DraftOrder = {
   discount: number;
   created_at: string;
   updated_at: string;
+  cloud_synced?: boolean;
 };
 
 export type ReceiptItemData = {

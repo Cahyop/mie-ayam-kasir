@@ -29,7 +29,12 @@ import {
 import { ReceiptDialog } from "@/components/receipt-dialog";
 import { ClosingDialog } from "@/components/closing-dialog";
 import { DraftOrdersListDialog, SaveDraftDialog } from "@/components/draft-orders-dialog";
-import { deleteDraftOrder, ensureDraftOrdersRestored, saveDraftOrder } from "@/lib/drafts";
+import {
+  deleteDraftOrder,
+  ensureDraftOrdersRestored,
+  pullDraftOrdersFromCloud,
+  saveDraftOrder,
+} from "@/lib/drafts";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -74,7 +79,9 @@ function KasirPage() {
   const customers = useLiveQuery(async () => {
     try {
       const all = await db.customers.toArray();
-      return all.sort((a, b) => a.name.localeCompare(b.name, "id-ID"));
+      return all
+        .filter((c) => c.name !== "__DRAFT_ORDER__")
+        .sort((a, b) => a.name.localeCompare(b.name, "id-ID"));
     } catch {
       return [];
     }
@@ -103,6 +110,17 @@ function KasirPage() {
   useEffect(() => {
     void ensureDraftOrdersRestored();
     void syncNow();
+
+    const onFocus = () => {
+      void pullDraftOrdersFromCloud();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
   }, []);
 
   const draftOrders =
