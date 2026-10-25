@@ -59,7 +59,8 @@ export function buildReceiptLines(data: ReceiptData, paperWidth: "58" | "80"): R
   push({ text: rule(cols) });
 
   for (const item of data.items) {
-    const isItemBungkus = item.orderType === "take_away";
+    // Penanda (Bks) di rincian menu hanya dicetak jika transaksi pesanan Campur
+    const isItemBungkus = data.orderType === "mixed" && item.orderType === "take_away";
     const displayName = isItemBungkus ? `${item.name} (Bks)` : item.name;
     push({ text: displayName });
     push({
@@ -111,7 +112,8 @@ export function buildWaText(data: ReceiptData): string {
   if (data.customerName) out.push(`Pelanggan: ${data.customerName}`);
   out.push("──────────────");
   for (const item of data.items) {
-    const isItemBungkus = item.orderType === "take_away";
+    // Penanda (Bungkus) hanya dicantumkan di detail item jika pesanan Campur
+    const isItemBungkus = data.orderType === "mixed" && item.orderType === "take_away";
     const displayName = isItemBungkus ? `${item.name} (Bungkus)` : item.name;
     out.push(`${formatPlain(item.qty)}x ${displayName}`);
     out.push(`   ${formatPlain(item.price)} = ${formatPlain(item.total)}`);

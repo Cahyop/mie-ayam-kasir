@@ -111,9 +111,14 @@ describe("Receipt and format helpers", () => {
 
     const takeAwayLines = buildReceiptLines({ ...dummyReceipt, orderType: "take_away" }, "58");
     expect(takeAwayLines.some((l) => l.text.includes("(Bks)"))).toBe(true);
+    // Detail item tidak perlu penanda (Bks) jika sudah bungkus semua
+    expect(takeAwayLines.some((l) => l.text.includes("Mie Ayam Pangsit (Bks)"))).toBe(false);
+    expect(takeAwayLines.some((l) => l.text === "Mie Ayam Pangsit")).toBe(true);
 
     const takeAwayWa = buildWaText({ ...dummyReceipt, orderType: "take_away" });
     expect(takeAwayWa).toContain("(Bungkus)");
+    expect(takeAwayWa).not.toContain("Mie Ayam Pangsit (Bungkus)");
+    expect(takeAwayWa).toContain("2x Mie Ayam Pangsit");
 
     // Mixed test (Dine In + Bungkus)
     const mixedReceipt: ReceiptData = {

@@ -464,7 +464,7 @@ function TransactionSheet({
                 <span>
                   {formatPlain(item.qty)}× {item.name}
                 </span>
-                {item.order_type === "take_away" && (
+                {transaction.order_type === "mixed" && item.order_type === "take_away" && (
                   <Badge
                     variant="outline"
                     className="text-[10px] px-1 py-0 h-4 border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
