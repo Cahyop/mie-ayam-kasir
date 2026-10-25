@@ -8,6 +8,13 @@
       "when": 1792901571037,
       "tag": "0000_pos_core_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792901641258,
+      "tag": "0001_transaction_items_updated_at",
+      "breakpoints": true
     }
   ]
 }
