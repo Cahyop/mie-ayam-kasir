@@ -10,33 +10,119 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as AuthenticatedKasRouteImport } from './routes/_authenticated/kas'
+import { Route as AuthenticatedKasirRouteImport } from './routes/_authenticated/kasir'
+import { Route as AuthenticatedProdukRouteImport } from './routes/_authenticated/produk'
+import { Route as AuthenticatedRiwayatRouteImport } from './routes/_authenticated/riwayat'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedKasRoute = AuthenticatedKasRouteImport.update({
+  id: '/kas',
+  path: '/kas',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedKasirRoute = AuthenticatedKasirRouteImport.update({
+  id: '/kasir',
+  path: '/kasir',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProdukRoute = AuthenticatedProdukRouteImport.update({
+  id: '/produk',
+  path: '/produk',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedRiwayatRoute = AuthenticatedRiwayatRouteImport.update({
+  id: '/riwayat',
+  path: '/riwayat',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/kas': typeof AuthenticatedKasRoute
+  '/kasir': typeof AuthenticatedKasirRoute
+  '/produk': typeof AuthenticatedProdukRoute
+  '/riwayat': typeof AuthenticatedRiwayatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/kas': typeof AuthenticatedKasRoute
+  '/kasir': typeof AuthenticatedKasirRoute
+  '/produk': typeof AuthenticatedProdukRoute
+  '/riwayat': typeof AuthenticatedRiwayatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/kas': typeof AuthenticatedKasRoute
+  '/_authenticated/kasir': typeof AuthenticatedKasirRoute
+  '/_authenticated/produk': typeof AuthenticatedProdukRoute
+  '/_authenticated/riwayat': typeof AuthenticatedRiwayatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/reset-password'
+    | '/kas'
+    | '/kasir'
+    | '/produk'
+    | '/riwayat'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/reset-password'
+    | '/kas'
+    | '/kasir'
+    | '/produk'
+    | '/riwayat'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/reset-password'
+    | '/_authenticated/kas'
+    | '/_authenticated/kasir'
+    | '/_authenticated/produk'
+    | '/_authenticated/riwayat'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +134,80 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/kas': {
+      id: '/_authenticated/kas'
+      path: '/kas'
+      fullPath: '/kas'
+      preLoaderRoute: typeof AuthenticatedKasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/kasir': {
+      id: '/_authenticated/kasir'
+      path: '/kasir'
+      fullPath: '/kasir'
+      preLoaderRoute: typeof AuthenticatedKasirRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/produk': {
+      id: '/_authenticated/produk'
+      path: '/produk'
+      fullPath: '/produk'
+      preLoaderRoute: typeof AuthenticatedProdukRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/riwayat': {
+      id: '/_authenticated/riwayat'
+      path: '/riwayat'
+      fullPath: '/riwayat'
+      preLoaderRoute: typeof AuthenticatedRiwayatRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedKasRoute: typeof AuthenticatedKasRoute
+  AuthenticatedKasirRoute: typeof AuthenticatedKasirRoute
+  AuthenticatedProdukRoute: typeof AuthenticatedProdukRoute
+  AuthenticatedRiwayatRoute: typeof AuthenticatedRiwayatRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedKasRoute: AuthenticatedKasRoute,
+  AuthenticatedKasirRoute: AuthenticatedKasirRoute,
+  AuthenticatedProdukRoute: AuthenticatedProdukRoute,
+  AuthenticatedRiwayatRoute: AuthenticatedRiwayatRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
