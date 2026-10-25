@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { enqueueUpsert, getUserId } from "@/lib/sync";
+import { enqueueUpsert, getUserId, syncNow } from "@/lib/sync";
 import { checkout, computeTransactionOrderType } from "@/lib/sales";
 import { formatRupiah, formatPlain, parseNumberInput, uid } from "@/lib/format";
 import { getActiveShift, openShift } from "@/lib/shift";
@@ -102,6 +102,7 @@ function KasirPage() {
   // Draft / Pending Orders State
   useEffect(() => {
     void ensureDraftOrdersRestored();
+    void syncNow();
   }, []);
 
   const draftOrders =

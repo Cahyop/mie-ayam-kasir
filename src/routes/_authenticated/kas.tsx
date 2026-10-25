@@ -12,6 +12,7 @@ import {
   toLocalDateIso,
 } from "@/lib/format";
 import { getActiveShift } from "@/lib/shift";
+import { syncNow } from "@/lib/sync";
 import { ClosingDialog } from "@/components/closing-dialog";
 import type { CashFlow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,10 @@ function KasPage() {
   const activeShift = useLiveQuery(() => getActiveShift(), []);
   const settings = useLiveQuery(async () => (await db.settings.toArray())[0], []);
   const [closingDialogOpen, setClosingDialogOpen] = useState(false);
+
+  useEffect(() => {
+    void syncNow();
+  }, []);
 
   const flows = useLiveQuery(() => db.cash_flows.orderBy("occurred_at").reverse().toArray(), []);
   const transactions = useLiveQuery(

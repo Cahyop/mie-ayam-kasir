@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatRupiah, formatDateId, formatTimeId, formatPlain, isToday } from "@/lib/format";
 import { getShiftHistory } from "@/lib/shift";
+import { syncNow } from "@/lib/sync";
 import { ShiftDetailDialog } from "@/components/shift-detail-dialog";
 import { EditTransactionDialog } from "@/components/edit-transaction-dialog";
 import type { ReceiptData, RegisterShift, Transaction } from "@/lib/types";
@@ -45,6 +46,10 @@ export function RiwayatPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+
+  useEffect(() => {
+    void syncNow();
+  }, []);
 
   // Shift Detail Dialog State
   const [selectedShift, setSelectedShift] = useState<RegisterShift | null>(null);

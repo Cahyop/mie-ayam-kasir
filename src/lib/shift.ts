@@ -32,10 +32,18 @@ async function getShiftHistoryRaw(): Promise<RegisterShift[]> {
   }
 }
 
-async function tryRecoverShiftFromCashFlows(): Promise<RegisterShift | null> {
+/**
+ * Auto-recovery shift jika kasir sudah aktif hari ini:
+ * 1. Dari db.cash_flows (modal pembukaan hari ini yang belum ditutup)
+ * 2. Dari db.transactions (jika hari ini sudah ada transaksi penjualan!)
+ */
+async function tryRecoverShift(): Promise<RegisterShift | null> {
   try {
+    const today = todayIso();
+    const history = await getShiftHistoryRaw();
+
+    // 1. Coba recover dari modal di cash_flows
     const flows = await db.cash_flows.toArray();
-    // Modal flows from today (or within last 24h)
     const modalFlows = flows
       .filter((f) => {
         if (f.type !== "modal" || !f.occurred_at) return false;
@@ -44,36 +52,64 @@ async function tryRecoverShiftFromCashFlows(): Promise<RegisterShift | null> {
       })
       .sort((a, b) => (b.occurred_at > a.occurred_at ? 1 : -1));
 
-    if (modalFlows.length === 0) return null;
+    if (modalFlows.length > 0) {
+      const latestModal = modalFlows[0];
+      const modalClosed = history.some((s) => {
+        if (s.status !== "closed") return false;
+        if (s.opened_at === latestModal.occurred_at) return true;
+        if (s.closed_at && s.closed_at >= latestModal.occurred_at) return true;
+        return false;
+      });
 
-    const latestModal = modalFlows[0];
-
-    // Cek apakah modal ini sudah pernah ditutup dalam shift history
-    const history = await getShiftHistoryRaw();
-    const alreadyClosed = history.some((s) => {
-      if (s.status !== "closed") return false;
-      if (s.opened_at === latestModal.occurred_at) return true;
-      if (s.closed_at && s.closed_at >= latestModal.occurred_at) return true;
-      return false;
-    });
-
-    if (alreadyClosed) {
-      return null;
+      if (!modalClosed) {
+        const userId = latestModal.user_id || getUserId() || "anonymous";
+        return {
+          id: uid(),
+          user_id: userId,
+          date: toLocalDateIso(latestModal.occurred_at),
+          status: "open",
+          opened_at: latestModal.occurred_at,
+          closed_at: null,
+          initial_cash: Math.max(0, latestModal.amount || 0),
+          notes: latestModal.note ? latestModal.note.replace(/^Modal Kasir:\s*/, "") : null,
+        };
+      }
     }
 
-    const userId = latestModal.user_id || getUserId() || "anonymous";
-    const reconstructed: RegisterShift = {
-      id: uid(),
-      user_id: userId,
-      date: toLocalDateIso(latestModal.occurred_at),
-      status: "open",
-      opened_at: latestModal.occurred_at,
-      closed_at: null,
-      initial_cash: Math.max(0, latestModal.amount || 0),
-      notes: latestModal.note ? latestModal.note.replace(/^Modal Kasir:\s*/, "") : null,
-    };
+    // 2. Jika modal flow tidak ada/belum tercatat, TETAPI sudah ada transaksi penjualan hari ini!
+    const txs = await db.transactions.toArray();
+    const todayTxs = txs
+      .filter((t) => t.created_at && isToday(t.created_at))
+      .sort((a, b) => (a.created_at > b.created_at ? 1 : -1)); // earliest first
 
-    return reconstructed;
+    if (todayTxs.length > 0) {
+      const latestTx = todayTxs[todayTxs.length - 1]; // latest transaction
+      const earliestTx = todayTxs[0]; // first transaction of the day
+
+      // Cek apakah transaksi hari ini sudah pernah ditutup dalam shift history
+      const txsClosed = history.some((s) => {
+        if (s.status !== "closed") return false;
+        if (s.closed_at && s.closed_at >= latestTx.created_at) return true;
+        return false;
+      });
+
+      if (!txsClosed) {
+        // Ada transaksi hari ini yang belum ditutup -> SHIFT AKTIF!
+        const userId = latestTx.user_id || getUserId() || "anonymous";
+        return {
+          id: uid(),
+          user_id: userId,
+          date: today,
+          status: "open",
+          opened_at: earliestTx.created_at,
+          closed_at: null,
+          initial_cash: 0,
+          notes: "Dipulihkan otomatis dari transaksi hari ini",
+        };
+      }
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -92,7 +128,6 @@ export async function getActiveShift(): Promise<RegisterShift | null> {
             const parsed = JSON.parse(raw) as RegisterShift;
             if (parsed && parsed.status === "open") {
               shift = parsed;
-              await setMeta(ACTIVE_SHIFT_KEY, shift);
             }
           } catch {
             // ignore
@@ -101,29 +136,34 @@ export async function getActiveShift(): Promise<RegisterShift | null> {
       }
     }
 
-    // 2. Auto-recover dari buku kas jika ada modal hari ini yang belum ditutup
+    // 2. Auto-recover dari buku kas atau transaksi hari ini
     if (!shift || shift.status !== "open") {
-      const recovered = await tryRecoverShiftFromCashFlows();
+      const recovered = await tryRecoverShift();
       if (recovered) {
         shift = recovered;
-        await setMeta(ACTIVE_SHIFT_KEY, shift);
-        if (typeof window !== "undefined" && window.localStorage) {
-          try {
-            localStorage.setItem(POS_ACTIVE_SHIFT_KEY, JSON.stringify(shift));
-          } catch {
-            // ignore
-          }
-        }
       }
     }
 
     if (shift && shift.status === "open") {
-      if (typeof window !== "undefined" && window.localStorage) {
-        try {
-          localStorage.setItem(POS_ACTIVE_SHIFT_KEY, JSON.stringify(shift));
-        } catch {
-          // ignore
-        }
+      // Simpan ke localStorage dan db.meta di background (setTimeout)
+      // JANGAN await setMeta di sini secara sinkron agar tidak memicu infinite re-query di useLiveQuery
+      if (typeof window !== "undefined") {
+        const activeShiftToPersist = shift;
+        setTimeout(async () => {
+          try {
+            localStorage.setItem(POS_ACTIVE_SHIFT_KEY, JSON.stringify(activeShiftToPersist));
+            const existing = await getMeta<RegisterShift>(ACTIVE_SHIFT_KEY);
+            if (
+              !existing ||
+              existing.id !== activeShiftToPersist.id ||
+              existing.status !== activeShiftToPersist.status
+            ) {
+              await setMeta(ACTIVE_SHIFT_KEY, activeShiftToPersist);
+            }
+          } catch {
+            // ignore
+          }
+        }, 0);
       }
       return shift;
     }

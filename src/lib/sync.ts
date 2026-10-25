@@ -87,6 +87,13 @@ function sanitizeRowForSupabase(
   for (const field of NUMERIC_FIELDS[table] ?? []) {
     if (out[field] != null) out[field] = Number(out[field]);
   }
+  // Sanitize UUID fields agar tidak mengirim string kosong "" ke kolom UUID PostgreSQL
+  const UUID_FIELDS = ["customer_id", "product_id", "transaction_id"];
+  for (const field of UUID_FIELDS) {
+    if (out[field] === "") {
+      out[field] = null;
+    }
+  }
   if (userId && (!out.user_id || out.user_id === "anonymous")) {
     out.user_id = userId;
   }
@@ -194,6 +201,18 @@ async function flushOutbox(): Promise<void> {
             msg.includes("timeout") ||
             error.code === "57001";
 
+          if (
+            msg.includes("jwt") ||
+            error.code === "PGRST301" ||
+            (error as unknown as { status?: number }).status === 401
+          ) {
+            try {
+              await supabase.auth.refreshSession();
+            } catch {
+              // ignore
+            }
+          }
+
           if (!isNetworkError) {
             // Drop permanent/schema error entry to prevent queue blocking
             console.warn(
@@ -248,12 +267,18 @@ async function flushOutbox(): Promise<void> {
 
 async function pullTable(table: OutboxTable): Promise<void> {
   const metaKey = `lastPull:${table}`;
-  let cursor = (await getMeta<string>(metaKey)) ?? "1970-01-01T00:00:00.000Z";
-  const startCursor = cursor;
   const store = db[table as keyof typeof db] as never as {
+    count: () => Promise<number>;
     get: (id: string) => Promise<Record<string, unknown> | undefined>;
     put: (row: Record<string, unknown>) => Promise<unknown>;
   };
+  const localCount = await store.count();
+  let cursor = (await getMeta<string>(metaKey)) ?? "1970-01-01T00:00:00.000Z";
+  // Jika database lokal masih kosong untuk tabel ini (misal di device baru), wajib tarik dari awal!
+  if (localCount === 0) {
+    cursor = "1970-01-01T00:00:00.000Z";
+  }
+  const startCursor = cursor;
 
   for (let page = 0; page < 100; page++) {
     const { data, error } = await supabase
@@ -280,8 +305,8 @@ async function pullTable(table: OutboxTable): Promise<void> {
     cursor = (data[data.length - 1] as { updated_at: string }).updated_at;
     if (data.length < 500) break;
   }
-  if (cursor > startCursor || startCursor === "1970-01-01T00:00:00.000Z") {
-    await setMeta(metaKey, cursor > startCursor ? cursor : new Date().toISOString());
+  if (cursor > startCursor) {
+    await setMeta(metaKey, cursor);
   }
 }
 

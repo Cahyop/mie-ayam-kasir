@@ -39,17 +39,24 @@ export function parseNumberInput(value: string): number {
 
 export function todayIso(): string {
   const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-export function toLocalDateIso(iso: string): string {
+export function toLocalDateIso(iso?: string | null): string {
+  if (!iso) return todayIso();
   const d = new Date(iso);
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+  if (isNaN(d.getTime())) return todayIso();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-export function isToday(iso: string): boolean {
+export function isToday(iso?: string | null): boolean {
+  if (!iso) return false;
   return toLocalDateIso(iso) === todayIso();
 }
 

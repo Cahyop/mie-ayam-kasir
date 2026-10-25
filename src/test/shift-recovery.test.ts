@@ -64,6 +64,31 @@ describe("Shift & Draft Persistence & Recovery", () => {
     expect(active).toBeNull();
   });
 
+  it("auto-recovery shift dari transaksi penjualan jika modal flow tidak ada tetapi ada transaksi hari ini", async () => {
+    // Tidak ada active_shift di meta, tidak ada di localStorage, tidak ada cash_flows modal
+    const now = new Date().toISOString();
+    await db.transactions.put({
+      id: "tx-test-today",
+      user_id: "test-user",
+      receipt_no: "R20261025-0001",
+      customer_id: null,
+      payment_method: "cash",
+      subtotal: 30000,
+      discount: 0,
+      total: 30000,
+      paid_amount: 30000,
+      change_amount: 0,
+      note: null,
+      created_at: now,
+      updated_at: now,
+    });
+
+    const active = await getActiveShift();
+    expect(active).not.toBeNull();
+    expect(active?.status).toBe("open");
+    expect(active?.opened_at).toBe(now);
+  });
+
   it("memulihkan draft orders dari backup localStorage jika IndexedDB kosong", async () => {
     await saveDraftOrder({
       tableNo: "Meja 10",
