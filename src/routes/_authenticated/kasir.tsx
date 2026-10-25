@@ -2,17 +2,26 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { getUserId } from "@/lib/sync";
+import { enqueueUpsert, getUserId } from "@/lib/sync";
 import { checkout } from "@/lib/sales";
-import { formatRupiah, formatPlain, parseNumberInput } from "@/lib/format";
-import type { CartItem, ReceiptData } from "@/lib/types";
+import { formatRupiah, formatPlain, parseNumberInput, uid } from "@/lib/format";
+import type { CartItem, Customer, ReceiptData } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { ReceiptDialog } from "@/components/receipt-dialog";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { Minus, Plus, Search, Trash2, ShoppingBasket } from "lucide-react";
+import { Minus, Plus, Search, Trash2, ShoppingBasket, UserPlus } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/kasir")({
   head: () => ({
@@ -25,13 +34,23 @@ export const Route = createFileRoute("/_authenticated/kasir")({
 });
 
 function KasirPage() {
-  const userId = getUserId();
   const products = useLiveQuery(async () => {
-    const all = await db.products.toArray();
-    return all.filter((p) => p.active);
+    try {
+      const all = await db.products.toArray();
+      return all.filter((p) => p.active);
+    } catch {
+      return [];
+    }
   }, []);
   const settings = useLiveQuery(async () => (await db.settings.toArray())[0], []);
-  const customers = useLiveQuery(() => db.customers.toArray(), []);
+  const customers = useLiveQuery(async () => {
+    try {
+      const all = await db.customers.toArray();
+      return all.sort((a, b) => a.name.localeCompare(b.name, "id-ID"));
+    } catch {
+      return [];
+    }
+  }, []);
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("Semua");
@@ -43,6 +62,11 @@ function KasirPage() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Quick Customer Add
+  const [quickCustomerOpen, setQuickCustomerOpen] = useState(false);
+  const [quickName, setQuickName] = useState("");
+  const [quickPhone, setQuickPhone] = useState("");
 
   const categories = useMemo(() => {
     const set = new Set<string>("Semua");
@@ -81,9 +105,42 @@ function KasirPage() {
     );
   }
 
+  async function handleQuickAddCustomer() {
+    if (!quickName.trim()) {
+      toast.error("Nama pelanggan wajib diisi");
+      return;
+    }
+    let userId = getUserId();
+    if (!userId) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      userId = user?.id ?? "anonymous";
+    }
+    const now = new Date().toISOString();
+    const row: Customer = {
+      id: uid(),
+      user_id: userId,
+      name: quickName.trim(),
+      phone: quickPhone.trim() || null,
+      note: null,
+      created_at: now,
+      updated_at: now,
+    };
+    await db.customers.put(row);
+    await enqueueUpsert("customers", row);
+    setCustomerId(row.id);
+    setQuickCustomerOpen(false);
+    setQuickName("");
+    setQuickPhone("");
+    toast.success(`Pelanggan "${row.name}" berhasil ditambahkan`);
+  }
+
   async function pay() {
     if (cart.length === 0) return;
+    let finalPaid = paidAmount;
     if (paymentMethod === "cash" && paidAmount < grandTotal) {
+      finalPaid = grandTotal;
       setPaidAmount(grandTotal);
     }
     setSaving(true);
@@ -91,7 +148,7 @@ function KasirPage() {
       const result = await checkout({
         cart,
         paymentMethod,
-        paidAmount: paymentMethod === "cash" ? Math.max(paidAmount, grandTotal) : grandTotal,
+        paidAmount: paymentMethod === "cash" ? Math.max(finalPaid, grandTotal) : grandTotal,
         discount,
         customerId,
         note: null,
@@ -125,6 +182,7 @@ function KasirPage() {
       setCustomerId(null);
     } catch (error) {
       console.error(error);
+      toast.error("Gagal memproses pembayaran");
     } finally {
       setSaving(false);
     }
@@ -279,8 +337,18 @@ function KasirPage() {
                   placeholder="0"
                 />
               </div>
+
               <div className="space-y-1.5">
-                <Label className="text-xs">Pelanggan (opsional)</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Pelanggan</Label>
+                  <button
+                    type="button"
+                    onClick={() => setQuickCustomerOpen(true)}
+                    className="flex items-center gap-0.5 text-[11px] font-semibold text-primary hover:underline"
+                  >
+                    <UserPlus className="h-3 w-3" /> Baru
+                  </button>
+                </div>
                 <select
                   value={customerId ?? ""}
                   onChange={(e) => setCustomerId(e.target.value || null)}
@@ -289,7 +357,7 @@ function KasirPage() {
                   <option value="">— Tanpa pelanggan —</option>
                   {customers?.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name}
+                      {c.name} {c.phone ? `(${c.phone})` : ""}
                     </option>
                   ))}
                 </select>
@@ -349,12 +417,47 @@ function KasirPage() {
         </SheetContent>
       </Sheet>
 
+      {/* Quick Add Customer Dialog */}
+      <Dialog open={quickCustomerOpen} onOpenChange={setQuickCustomerOpen}>
+        <DialogContent className="max-w-sm rounded-2xl p-5">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold">Tambah Pelanggan Baru</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div className="space-y-1">
+              <Label className="text-xs">Nama Pelanggan *</Label>
+              <Input
+                placeholder="mis. Mas Joko / Meja 3"
+                value={quickName}
+                onChange={(e) => setQuickName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Nomor WhatsApp (opsional)</Label>
+              <Input
+                placeholder="mis. 08123456789"
+                value={quickPhone}
+                onChange={(e) => setQuickPhone(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setQuickCustomerOpen(false)}>
+              Batal
+            </Button>
+            <Button size="sm" onClick={handleQuickAddCustomer}>
+              Simpan &amp; Pilih
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ReceiptDialog
         receipt={receipt}
         onClose={() => setReceipt(null)}
         paperWidth={settings?.paper_width ?? "58"}
       />
-      {userId === null && <p className="hidden">x</p>}
     </div>
   );
 }

@@ -35,11 +35,12 @@ export function buildReceiptLines(data: ReceiptData, paperWidth: "58" | "80"): R
   if (data.storePhone) push({ text: `Telp: ${data.storePhone}`, align: "center" });
 
   push({ text: rule(cols) });
-  push({ text: `No: ${data.receiptNo}` });
+
+  // Nomor struk di kiri, jam transaksi di kanan (tanpa tanggal)
   const dt = new Date(data.createdAt);
-  push({
-    text: `${dt.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" })} ${dt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`,
-  });
+  const timeStr = dt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  push({ text: twoCol(`No: ${data.receiptNo}`, timeStr, cols) });
+
   if (data.customerName) push({ text: `Pelanggan: ${data.customerName}` });
   push({ text: rule(cols) });
 
@@ -79,12 +80,11 @@ export function buildReceiptLines(data: ReceiptData, paperWidth: "58" | "80"): R
 
 export function buildWaText(data: ReceiptData): string {
   const dt = new Date(data.createdAt);
+  const timeStr = dt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
   const out: string[] = [];
   out.push(`*${data.storeName}*`);
-  out.push(`Struk: ${data.receiptNo}`);
-  out.push(
-    `${dt.toLocaleDateString("id-ID", { day: "2-digit", month: "2-digit", year: "numeric" })} ${dt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`,
-  );
+  out.push(`Struk: ${data.receiptNo} • ${timeStr}`);
+  if (data.customerName) out.push(`Pelanggan: ${data.customerName}`);
   out.push("──────────────");
   for (const item of data.items) {
     out.push(`${formatPlain(item.qty)}x ${item.name}`);

@@ -29,7 +29,7 @@ describe("Receipt and format helpers", () => {
     expect(receiptCols("80")).toBe(48);
   });
 
-  it("generates proper receipt lines for thermal printer", () => {
+  it("generates proper receipt lines for thermal printer with receipt number and time on the same line", () => {
     const lines58 = buildReceiptLines(dummyReceipt, "58");
     expect(lines58.length).toBeGreaterThan(5);
 
@@ -37,7 +37,13 @@ describe("Receipt and format helpers", () => {
     expect(texts).toContain("Mie Ayam Berkah");
     expect(texts).toContain("Jl. Merdeka No. 10");
     expect(texts).toContain("Telp: 08123456789");
-    expect(texts).toContain("No: TX-20261025-001");
+
+    // Receipt number and time are on the same line
+    const receiptLine = texts.find((t) => t.includes("TX-20261025-001"));
+    expect(receiptLine).toBeDefined();
+    expect(receiptLine).toMatch(/No:\s+TX-20261025-001/);
+    expect(receiptLine).toMatch(/\d{2}[:.]\d{2}/);
+
     expect(texts).toContain("Pelanggan: Mas Joko");
     expect(texts).toContain("Mie Ayam Pangsit");
     expect(texts).toContain("Es Teh Manis");
@@ -49,6 +55,7 @@ describe("Receipt and format helpers", () => {
     const waText = buildWaText(dummyReceipt);
     expect(waText).toContain("*Mie Ayam Berkah*");
     expect(waText).toContain("TX-20261025-001");
+    expect(waText).toContain("Pelanggan: Mas Joko");
     expect(waText).toContain("2x Mie Ayam Pangsit");
     expect(waText).toContain("Subtotal: Rp 40.000");
     expect(waText).toContain("Diskon: Rp 5.000");
