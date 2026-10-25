@@ -6,8 +6,16 @@ import { enqueueUpsert, getUserId } from "@/lib/sync";
 import { checkout, computeTransactionOrderType } from "@/lib/sales";
 import { formatRupiah, formatPlain, parseNumberInput, uid } from "@/lib/format";
 import { getActiveShift, openShift } from "@/lib/shift";
-import type { CartItem, Customer, ItemOrderType, OrderType, ReceiptData } from "@/lib/types";
+import type {
+  CartItem,
+  Customer,
+  DraftOrder,
+  ItemOrderType,
+  OrderType,
+  ReceiptData,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -20,6 +28,8 @@ import {
 } from "@/components/ui/dialog";
 import { ReceiptDialog } from "@/components/receipt-dialog";
 import { ClosingDialog } from "@/components/closing-dialog";
+import { DraftOrdersListDialog, SaveDraftDialog } from "@/components/draft-orders-dialog";
+import { deleteDraftOrder, saveDraftOrder } from "@/lib/drafts";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -35,6 +45,8 @@ import {
   Loader2,
   Utensils,
   ShoppingBag,
+  Bookmark,
+  ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -86,6 +98,14 @@ function KasirPage() {
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Draft / Pending Orders State
+  const draftOrders =
+    useLiveQuery(() => db.draft_orders.orderBy("updated_at").reverse().toArray(), []) ?? [];
+  const [draftListOpen, setDraftListOpen] = useState(false);
+  const [saveDraftOpen, setSaveDraftOpen] = useState(false);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
+  const [tableNo, setTableNo] = useState<string>("");
 
   // Quick Customer Add
   const [quickCustomerOpen, setQuickCustomerOpen] = useState(false);
@@ -268,6 +288,14 @@ function KasirPage() {
         orderType: result.transaction.order_type,
       };
       setReceipt(data);
+
+      // Jika transaksi berasal dari draft, bersihkan draft tersebut
+      if (editingDraftId) {
+        await deleteDraftOrder(editingDraftId);
+        setEditingDraftId(null);
+        setTableNo("");
+      }
+
       setCart([]);
       setCartOpen(false);
       setDiscount(0);
@@ -280,6 +308,77 @@ function KasirPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSaveDraft(tblNo: string, draftNote: string) {
+    if (cart.length === 0) return;
+    try {
+      const saved = await saveDraftOrder({
+        id: editingDraftId,
+        tableNo: tblNo,
+        customerName: customer?.name ?? null,
+        customerId,
+        note: draftNote || null,
+        items: cart,
+        orderType: computeTransactionOrderType(cart),
+        discount,
+      });
+      setTableNo("");
+      setEditingDraftId(null);
+      setCart([]);
+      setDiscount(0);
+      setPaidAmount(0);
+      setCustomerId(null);
+      setCartOpen(false);
+      setOrderType("dine_in");
+      toast.success(`Pesanan "${saved.table_no || "Draft"}" berhasil disimpan!`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Gagal menyimpan pesanan: ${msg}`);
+    }
+  }
+
+  function handleOpenDraft(draft: DraftOrder) {
+    setCart(draft.items);
+    setEditingDraftId(draft.id);
+    setTableNo(draft.table_no || "");
+    setCustomerId(draft.customer_id);
+    setDiscount(draft.discount || 0);
+    setOrderType(draft.order_type);
+    setCartOpen(true);
+    toast.info(`Membuka pesanan "${draft.table_no || "Draft"}"`);
+  }
+
+  function handlePrintBill(draft: DraftOrder) {
+    const sub = draft.items.reduce((s, it) => s + it.price * it.qty, 0);
+    const disc = draft.discount || 0;
+    const tot = Math.max(0, sub - disc);
+    const data: ReceiptData = {
+      receiptNo: draft.table_no || "DRAFT",
+      createdAt: draft.created_at,
+      storeName: settings?.store_name ?? "Mie Ayam",
+      storeAddress: settings?.store_address ?? null,
+      storePhone: settings?.store_phone ?? null,
+      footer: settings?.receipt_footer ?? "",
+      items: draft.items.map((it) => ({
+        name: it.name,
+        qty: it.qty,
+        price: it.price,
+        total: it.price * it.qty,
+        orderType: it.order_type,
+      })),
+      subtotal: sub,
+      discount: disc,
+      total: tot,
+      paymentMethod: "cash",
+      paidAmount: 0,
+      changeAmount: 0,
+      customerName: draft.customer_name ?? null,
+      orderType: draft.order_type,
+      isDraft: true,
+      tableNo: draft.table_no,
+    };
+    setReceipt(data);
   }
 
   // Loading state when reading active shift from db
@@ -390,16 +489,60 @@ function KasirPage() {
           </div>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setClosingDialogOpen(true)}
-          className="h-7 text-xs font-semibold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive px-2.5 gap-1"
-        >
-          <Clock className="h-3 w-3" />
-          Tutup Kasir
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setDraftListOpen(true)}
+            className="h-7 text-xs font-semibold px-2.5 gap-1.5 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+          >
+            <ClipboardList className="h-3.5 w-3.5" />
+            <span>Pesanan</span>
+            {draftOrders.length > 0 && (
+              <Badge className="h-4 px-1.5 text-[10px] bg-amber-600 text-white hover:bg-amber-600">
+                {draftOrders.length}
+              </Badge>
+            )}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setClosingDialogOpen(true)}
+            className="h-7 text-xs font-semibold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive px-2.5 gap-1"
+          >
+            <Clock className="h-3 w-3" />
+            Tutup Kasir
+          </Button>
+        </div>
       </div>
+
+      {/* Status Bar Jika Sedang Mengedit Draft Meja */}
+      {editingDraftId && (
+        <div className="mb-3 flex items-center justify-between rounded-2xl bg-amber-500/15 border border-amber-500/30 px-3 py-2 text-xs shadow-xs">
+          <div className="flex items-center gap-2">
+            <Bookmark className="h-4 w-4 text-amber-700 dark:text-amber-400 shrink-0" />
+            <span className="font-semibold text-amber-900 dark:text-amber-300">
+              Mengedit: <strong>{tableNo || "Pesanan Aktif"}</strong>
+              {customer ? ` (${customer.name})` : ""}
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setCart([]);
+              setEditingDraftId(null);
+              setTableNo("");
+              toast.info("Keluar dari edit pesanan meja");
+            }}
+            className="h-6 text-[11px] px-2 text-muted-foreground hover:text-foreground"
+          >
+            Batal / Buat Baru
+          </Button>
+        </div>
+      )}
 
       {/* Tipe Pesanan Kasir (Default: Makan di Tempat) */}
       <div className="mb-3 grid grid-cols-2 gap-2">
@@ -706,12 +849,48 @@ function KasirPage() {
               </div>
             </div>
 
-            <Button onClick={pay} disabled={saving} className="h-12 w-full text-base font-bold">
-              {saving ? "Memproses…" : `Bayar ${formatRupiah(grandTotal)}`}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSaveDraftOpen(true)}
+                className="h-12 flex-1 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 gap-1.5 text-xs font-semibold"
+              >
+                <Bookmark className="h-4 w-4" />
+                {editingDraftId ? "Perbarui Pesanan" : "Simpan Pesanan"}
+              </Button>
+              <Button
+                type="button"
+                onClick={pay}
+                disabled={saving}
+                className="h-12 flex-1 text-sm font-bold gap-1.5"
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Bayar {formatRupiah(grandTotal)}
+              </Button>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Save Draft / Meja Dialog */}
+      <SaveDraftDialog
+        open={saveDraftOpen}
+        onOpenChange={setSaveDraftOpen}
+        cart={cart}
+        defaultTableNo={tableNo}
+        isEditing={Boolean(editingDraftId)}
+        onSave={handleSaveDraft}
+      />
+
+      {/* List Active Drafts Dialog */}
+      <DraftOrdersListDialog
+        open={draftListOpen}
+        onOpenChange={setDraftListOpen}
+        drafts={draftOrders}
+        onOpenDraft={handleOpenDraft}
+        onPrintBill={handlePrintBill}
+      />
 
       {/* Quick Add Customer Dialog */}
       <Dialog open={quickCustomerOpen} onOpenChange={setQuickCustomerOpen}>

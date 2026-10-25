@@ -2,6 +2,7 @@ import Dexie, { type Table } from "dexie";
 import type {
   CashFlow,
   Customer,
+  DraftOrder,
   OutboxEntry,
   Product,
   Settings,
@@ -20,6 +21,7 @@ class PosDatabase extends Dexie {
   settings!: Table<Settings, string>;
   outbox!: Table<OutboxEntry, number>;
   meta!: Table<MetaEntry, string>;
+  draft_orders!: Table<DraftOrder, string>;
 
   constructor() {
     super("pos-mie-ayam");
@@ -36,6 +38,9 @@ class PosDatabase extends Dexie {
     this.version(2).stores({
       products: "id, name, updated_at, active, category",
       customers: "id, name, updated_at",
+    });
+    this.version(3).stores({
+      draft_orders: "id, table_no, customer_name, updated_at, created_at",
     });
   }
 }
@@ -56,6 +61,7 @@ export async function resetTransactionData(): Promise<void> {
     db.transactions.clear(),
     db.transaction_items.clear(),
     db.cash_flows.clear(),
+    db.draft_orders.clear(),
     db.meta.delete("active_shift"),
     db.meta.delete("shift_history"),
   ]);

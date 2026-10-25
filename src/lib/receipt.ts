@@ -53,7 +53,13 @@ export function buildReceiptLines(data: ReceiptData, paperWidth: "58" | "80"): R
           : "(Makan)";
   }
 
-  push({ text: twoCol(`No: ${data.receiptNo} ${orderTag}`, timeStr, cols) });
+  if (data.isDraft) {
+    push({ text: "** BILL SEMENTARA (BELUM LUNAS) **", align: "center", bold: true });
+    const label = data.tableNo ? `Meja: ${data.tableNo}` : "Pesanan Meja";
+    push({ text: twoCol(`${label} ${orderTag}`, timeStr, cols) });
+  } else {
+    push({ text: twoCol(`No: ${data.receiptNo} ${orderTag}`, timeStr, cols) });
+  }
 
   if (data.customerName) push({ text: `Pelanggan: ${data.customerName}` });
   push({ text: rule(cols) });
@@ -82,15 +88,21 @@ export function buildReceiptLines(data: ReceiptData, paperWidth: "58" | "80"): R
     bold: true,
     doubleHeight: true,
   });
-  push({
-    text: twoCol(
-      data.paymentMethod === "cash" ? "TUNAI" : "QRIS",
-      formatPlain(data.paidAmount),
-      cols,
-    ),
-  });
-  if (data.paymentMethod === "cash" && data.changeAmount > 0) {
-    push({ text: twoCol("KEMBALI", formatPlain(data.changeAmount), cols) });
+  if (data.isDraft) {
+    push({ text: rule(cols) });
+    push({ text: "* Silakan bawa bon ini ke kasir *", align: "center" });
+    push({ text: "* Belum Lunas *", align: "center", bold: true });
+  } else {
+    push({
+      text: twoCol(
+        data.paymentMethod === "cash" ? "TUNAI" : "QRIS",
+        formatPlain(data.paidAmount),
+        cols,
+      ),
+    });
+    if (data.paymentMethod === "cash" && data.changeAmount > 0) {
+      push({ text: twoCol("KEMBALI", formatPlain(data.changeAmount), cols) });
+    }
   }
   push({ text: rule(cols) });
   if (data.footer) push({ text: data.footer, align: "center" });
@@ -102,13 +114,19 @@ export function buildWaText(data: ReceiptData): string {
   const timeStr = dt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
   const out: string[] = [];
   out.push(`*${data.storeName}*`);
-  const orderLabelWa =
-    data.orderType === "take_away"
-      ? "Bungkus"
-      : data.orderType === "mixed"
-        ? "Campur (Makan & Bungkus)"
-        : "Makan di Tempat";
-  out.push(`Struk: ${data.receiptNo} • ${timeStr} (${orderLabelWa})`);
+  if (data.isDraft) {
+    out.push(`*BILL SEMENTARA (BELUM LUNAS)*`);
+    const label = data.tableNo ? `Meja: ${data.tableNo}` : "Pesanan Meja";
+    out.push(`${label} • ${timeStr}`);
+  } else {
+    const orderLabelWa =
+      data.orderType === "take_away"
+        ? "Bungkus"
+        : data.orderType === "mixed"
+          ? "Campur (Makan & Bungkus)"
+          : "Makan di Tempat";
+    out.push(`Struk: ${data.receiptNo} • ${timeStr} (${orderLabelWa})`);
+  }
   if (data.customerName) out.push(`Pelanggan: ${data.customerName}`);
   out.push("──────────────");
   for (const item of data.items) {
@@ -124,11 +142,15 @@ export function buildWaText(data: ReceiptData): string {
     out.push(`Diskon: Rp ${formatPlain(data.discount)}`);
   }
   out.push(`*Total: Rp ${formatPlain(data.total)}*`);
-  out.push(
-    `Bayar: ${data.paymentMethod === "cash" ? "Tunai" : "QRIS"} (Rp ${formatPlain(data.paidAmount)})`,
-  );
-  if (data.paymentMethod === "cash" && data.changeAmount > 0) {
-    out.push(`Kembalian: Rp ${formatPlain(data.changeAmount)}`);
+  if (data.isDraft) {
+    out.push(`_Status: Belum Lunas (Silakan bayar di kasir)_`);
+  } else {
+    out.push(
+      `Bayar: ${data.paymentMethod === "cash" ? "Tunai" : "QRIS"} (Rp ${formatPlain(data.paidAmount)})`,
+    );
+    if (data.paymentMethod === "cash" && data.changeAmount > 0) {
+      out.push(`Kembalian: Rp ${formatPlain(data.changeAmount)}`);
+    }
   }
   out.push("──────────────");
   if (data.footer) out.push(data.footer);

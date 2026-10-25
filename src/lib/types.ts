@@ -88,6 +88,20 @@ export type CartItem = {
   order_type?: ItemOrderType;
 };
 
+export type DraftOrder = {
+  id: string;
+  user_id: string;
+  table_no: string | null;
+  customer_name: string | null;
+  customer_id: string | null;
+  note: string | null;
+  items: CartItem[];
+  order_type: OrderType;
+  discount: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ReceiptItemData = {
   name: string;
   qty: number;
@@ -112,6 +126,8 @@ export type ReceiptData = {
   changeAmount: number;
   customerName?: string | null;
   orderType?: OrderType;
+  isDraft?: boolean;
+  tableNo?: string | null;
 };
 
 export type OutboxTable =
