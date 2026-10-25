@@ -51,6 +51,23 @@ export async function setMeta(key: string, value: unknown): Promise<void> {
   await db.meta.put({ key, value });
 }
 
+export async function resetTransactionData(): Promise<void> {
+  await Promise.all([
+    db.transactions.clear(),
+    db.transaction_items.clear(),
+    db.cash_flows.clear(),
+    db.meta.delete("active_shift"),
+    db.meta.delete("shift_history"),
+  ]);
+  try {
+    await db.outbox
+      .filter((entry) => ["transactions", "transaction_items", "cash_flows"].includes(entry.table))
+      .delete();
+  } catch {
+    // ignore
+  }
+}
+
 export async function clearUserData(): Promise<void> {
   await Promise.all([
     db.products.clear(),

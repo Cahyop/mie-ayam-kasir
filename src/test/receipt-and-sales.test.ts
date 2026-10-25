@@ -3,6 +3,7 @@ import { buildReceiptLines, buildWaText, waHref, receiptCols } from "@/lib/recei
 import { formatRupiah, formatPlain, makeReceiptNo } from "@/lib/format";
 import { getNextReceiptNo } from "@/lib/sales";
 import { buildShiftReceiptLines, buildShiftWaText } from "@/lib/shift";
+import { db, resetTransactionData } from "@/lib/db";
 import type { ReceiptData, ShiftSummary } from "@/lib/types";
 
 describe("Receipt and format helpers", () => {
@@ -144,5 +145,46 @@ describe("Receipt and format helpers", () => {
     expect(waText).toContain("Modal Awal:* Rp 100.000");
     expect(waText).toContain("Total Omset:* Rp 600.000 (35 nota)");
     expect(waText).toContain("Selisih:* *PAS (Rp 0)*");
+  });
+
+  it("resets transaction data while preserving products and settings", async () => {
+    // Seed dummy product and transaction
+    await db.products.put({
+      id: "prod-reset-test",
+      user_id: "test",
+      name: "Mie Ayam Pangsit Test",
+      category: "Makanan",
+      price: 15000,
+      stock: 50,
+      track_stock: true,
+      active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    await db.transactions.put({
+      id: "tx-reset-test",
+      user_id: "test",
+      receipt_no: "R20261025-0001",
+      customer_id: null,
+      payment_method: "cash",
+      subtotal: 15000,
+      discount: 0,
+      total: 15000,
+      paid_amount: 15000,
+      change_amount: 0,
+      note: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    expect(await db.products.count()).toBeGreaterThan(0);
+    expect(await db.transactions.count()).toBeGreaterThan(0);
+
+    await resetTransactionData();
+
+    // Transactions cleared, products preserved!
+    expect(await db.transactions.count()).toBe(0);
+    expect(await db.products.count()).toBeGreaterThan(0);
   });
 });
