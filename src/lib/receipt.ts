@@ -70,7 +70,7 @@ export function buildReceiptLines(data: ReceiptData, paperWidth: "58" | "80"): R
       cols,
     ),
   });
-  if (data.paymentMethod === "cash") {
+  if (data.paymentMethod === "cash" && data.changeAmount > 0) {
     push({ text: twoCol("KEMBALI", formatPlain(data.changeAmount), cols) });
   }
   push({ text: rule(cols) });
@@ -97,7 +97,7 @@ export function buildWaText(data: ReceiptData): string {
   out.push(
     `Bayar: ${data.paymentMethod === "cash" ? "Tunai" : "QRIS"} (Rp ${formatPlain(data.paidAmount)})`,
   );
-  if (data.paymentMethod === "cash") {
+  if (data.paymentMethod === "cash" && data.changeAmount > 0) {
     out.push(`Kembalian: Rp ${formatPlain(data.changeAmount)}`);
   }
   out.push("──────────────");

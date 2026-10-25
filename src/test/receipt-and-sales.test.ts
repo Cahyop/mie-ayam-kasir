@@ -51,6 +51,22 @@ describe("Receipt and format helpers", () => {
     expect(texts.some((t) => t.includes("KEMBALI"))).toBe(true);
   });
 
+  it("omits KEMBALI when money is exact (changeAmount = 0)", () => {
+    const exactReceipt: ReceiptData = {
+      ...dummyReceipt,
+      paidAmount: 35000,
+      changeAmount: 0,
+    };
+    const lines = buildReceiptLines(exactReceipt, "58");
+    const texts = lines.map((l) => l.text);
+    expect(texts.some((t) => t.includes("TOTAL"))).toBe(true);
+    expect(texts.some((t) => t.includes("TUNAI"))).toBe(true);
+    expect(texts.some((t) => t.includes("KEMBALI"))).toBe(false);
+
+    const waText = buildWaText(exactReceipt);
+    expect(waText).not.toContain("Kembalian:");
+  });
+
   it("formats WhatsApp receipt text correctly", () => {
     const waText = buildWaText(dummyReceipt);
     expect(waText).toContain("*Mie Ayam Berkah*");
