@@ -3,10 +3,10 @@ import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { enqueueUpsert, getUserId } from "@/lib/sync";
-import { checkout } from "@/lib/sales";
+import { checkout, computeTransactionOrderType } from "@/lib/sales";
 import { formatRupiah, formatPlain, parseNumberInput, uid } from "@/lib/format";
 import { getActiveShift, openShift } from "@/lib/shift";
-import type { CartItem, Customer, OrderType, ReceiptData } from "@/lib/types";
+import type { CartItem, Customer, ItemOrderType, OrderType, ReceiptData } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -123,23 +123,90 @@ function KasirPage() {
   }
 
   function addToCart(productId: string, name: string, price: number) {
+    const itemType: ItemOrderType = orderType === "take_away" ? "take_away" : "dine_in";
     setCart((prev) => {
-      const existing = prev.find((item) => item.product_id === productId);
-      if (existing) {
-        return prev.map((item) =>
-          item.product_id === productId ? { ...item, qty: item.qty + 1 } : item,
+      const existingIdx = prev.findIndex(
+        (item) => item.product_id === productId && (item.order_type || "dine_in") === itemType,
+      );
+      if (existingIdx > -1) {
+        return prev.map((item, idx) =>
+          idx === existingIdx ? { ...item, qty: item.qty + 1 } : item,
         );
       }
-      return [...prev, { product_id: productId, name, price, qty: 1 }];
+      return [...prev, { product_id: productId, name, price, qty: 1, order_type: itemType }];
     });
   }
 
-  function changeQty(productId: string | null, delta: number) {
+  function changeQty(
+    productId: string | null,
+    delta: number,
+    itemOrderType: ItemOrderType = "dine_in",
+  ) {
     setCart((prev) =>
       prev
-        .map((item) => (item.product_id === productId ? { ...item, qty: item.qty + delta } : item))
+        .map((item) =>
+          item.product_id === productId && (item.order_type || "dine_in") === itemOrderType
+            ? { ...item, qty: item.qty + delta }
+            : item,
+        )
         .filter((item) => item.qty > 0),
     );
+  }
+
+  function splitOrToggleItem(itemIndex: number) {
+    setCart((prev) => {
+      const target = prev[itemIndex];
+      if (!target) return prev;
+      const currentType = target.order_type || "dine_in";
+      const newType: ItemOrderType = currentType === "take_away" ? "dine_in" : "take_away";
+
+      if (target.qty <= 1) {
+        // Single item: merge if other type already exists in cart, otherwise just flip type
+        const existingOther = prev.findIndex(
+          (item, i) =>
+            i !== itemIndex &&
+            item.product_id === target.product_id &&
+            (item.order_type || "dine_in") === newType,
+        );
+        if (existingOther > -1) {
+          return prev
+            .map((item, i) => (i === existingOther ? { ...item, qty: item.qty + 1 } : item))
+            .filter((_, i) => i !== itemIndex);
+        }
+        return prev.map((item, i) => (i === itemIndex ? { ...item, order_type: newType } : item));
+      }
+
+      // Multiple portions: move 1 portion to newType
+      const existingOther = prev.findIndex(
+        (item) =>
+          item.product_id === target.product_id && (item.order_type || "dine_in") === newType,
+      );
+      if (existingOther > -1) {
+        return prev.map((item, i) => {
+          if (i === itemIndex) return { ...item, qty: item.qty - 1 };
+          if (i === existingOther) return { ...item, qty: item.qty + 1 };
+          return item;
+        });
+      }
+      const newCart = prev.map((item, i) =>
+        i === itemIndex ? { ...item, qty: item.qty - 1 } : item,
+      );
+      newCart.splice(itemIndex + 1, 0, {
+        ...target,
+        qty: 1,
+        order_type: newType,
+      });
+      return newCart;
+    });
+  }
+
+  function handleHeaderOrderTypeChange(type: OrderType) {
+    setOrderType(type);
+    setCart((prev) => {
+      if (prev.length === 0) return prev;
+      const targetType: ItemOrderType = type === "take_away" ? "take_away" : "dine_in";
+      return prev.map((item) => ({ ...item, order_type: targetType }));
+    });
   }
 
   async function handleQuickAddCustomer() {
@@ -182,6 +249,7 @@ function KasirPage() {
     }
     setSaving(true);
     try {
+      const computedType = computeTransactionOrderType(cart);
       const result = await checkout({
         cart,
         paymentMethod,
@@ -189,7 +257,7 @@ function KasirPage() {
         discount,
         customerId,
         note: null,
-        orderType,
+        orderType: computedType,
       });
       const data: ReceiptData = {
         receiptNo: result.transaction.receipt_no,
@@ -203,6 +271,7 @@ function KasirPage() {
           qty: item.qty,
           price: item.price,
           total: item.total,
+          orderType: item.order_type,
         })),
         subtotal: result.transaction.subtotal,
         discount: result.transaction.discount,
@@ -418,13 +487,47 @@ function KasirPage() {
           </SheetHeader>
 
           <div className="mt-3 divide-y divide-border">
-            {cart.map((item) => (
+            {cart.map((item, idx) => (
               <div
-                key={item.product_id ?? item.name}
+                key={`${item.product_id ?? item.name}-${item.order_type || "dine_in"}`}
                 className="flex items-center justify-between py-2.5"
               >
-                <div className="flex-1 pr-2">
-                  <p className="text-sm font-semibold">{item.name}</p>
+                <div className="flex-1 pr-2 space-y-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-sm font-semibold">{item.name}</p>
+                    <button
+                      type="button"
+                      onClick={() => splitOrToggleItem(idx)}
+                      className={cn(
+                        "text-[10px] px-1.5 py-0.5 rounded-md font-semibold border transition-all inline-flex items-center gap-1",
+                        item.order_type === "take_away"
+                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
+                          : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20",
+                      )}
+                      title="Klik untuk ubah Makan di Tempat / Bungkus"
+                    >
+                      {item.order_type === "take_away" ? (
+                        <>
+                          <ShoppingBag className="h-2.5 w-2.5" />
+                          Bungkus
+                        </>
+                      ) : (
+                        <>
+                          <Utensils className="h-2.5 w-2.5" />
+                          Makan Sini
+                        </>
+                      )}
+                    </button>
+                    {item.qty > 1 && (item.order_type || "dine_in") === "dine_in" && (
+                      <button
+                        type="button"
+                        onClick={() => splitOrToggleItem(idx)}
+                        className="text-[10px] text-amber-700 dark:text-amber-400 hover:underline font-medium"
+                      >
+                        + Bungkus 1
+                      </button>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">{formatRupiah(item.price)}</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -432,7 +535,7 @@ function KasirPage() {
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => changeQty(item.product_id, -1)}
+                    onClick={() => changeQty(item.product_id, -1, item.order_type || "dine_in")}
                   >
                     {item.qty === 1 ? (
                       <Trash2 className="h-3.5 w-3.5" />
@@ -445,7 +548,7 @@ function KasirPage() {
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => changeQty(item.product_id, 1)}
+                    onClick={() => changeQty(item.product_id, 1, item.order_type || "dine_in")}
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </Button>
@@ -455,14 +558,26 @@ function KasirPage() {
           </div>
 
           <div className="mt-4 space-y-3 border-t border-border pt-4">
-            {/* Pilihan Jenis Pesanan */}
+            {/* Pilihan Mode Transaksi Utama */}
             <div className="space-y-1">
-              <Label className="text-xs font-semibold">Tipe Pesanan</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Tipe Pesanan Utama</Label>
+                <span className="text-[11px] text-muted-foreground">
+                  Status:{" "}
+                  <strong className="text-foreground">
+                    {computeTransactionOrderType(cart) === "mixed"
+                      ? "Campur (Makan & Bungkus)"
+                      : computeTransactionOrderType(cart) === "take_away"
+                        ? "Bungkus"
+                        : "Makan di Tempat"}
+                  </strong>
+                </span>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   type="button"
                   variant={orderType === "dine_in" ? "default" : "outline"}
-                  onClick={() => setOrderType("dine_in")}
+                  onClick={() => handleHeaderOrderTypeChange("dine_in")}
                   className="w-full gap-1.5 text-xs font-semibold"
                 >
                   <Utensils className="h-3.5 w-3.5" />
@@ -471,7 +586,7 @@ function KasirPage() {
                 <Button
                   type="button"
                   variant={orderType === "take_away" ? "default" : "outline"}
-                  onClick={() => setOrderType("take_away")}
+                  onClick={() => handleHeaderOrderTypeChange("take_away")}
                   className="w-full gap-1.5 text-xs font-semibold"
                 >
                   <ShoppingBag className="h-3.5 w-3.5" />

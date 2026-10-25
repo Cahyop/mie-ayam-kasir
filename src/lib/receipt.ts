@@ -36,19 +36,32 @@ export function buildReceiptLines(data: ReceiptData, paperWidth: "58" | "80"): R
 
   push({ text: rule(cols) });
 
-  // Nomor struk di kiri, jam transaksi di kanan (tanpa tanggal)
+  // Nomor struk & singkatan tipe pesanan di kiri (hemat kertas), jam transaksi di kanan
   const dt = new Date(data.createdAt);
   const timeStr = dt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-  push({ text: twoCol(`No: ${data.receiptNo}`, timeStr, cols) });
 
-  const orderLabel = data.orderType === "take_away" ? "BUNGKUS" : "MAKAN DI TEMPAT";
-  push({ text: `[ ${orderLabel} ]`, align: "center", bold: true });
+  let orderTag = "(Mkn)";
+  if (paperWidth === "58") {
+    orderTag =
+      data.orderType === "take_away" ? "(Bks)" : data.orderType === "mixed" ? "(Cpr)" : "(Mkn)";
+  } else {
+    orderTag =
+      data.orderType === "take_away"
+        ? "(Bungkus)"
+        : data.orderType === "mixed"
+          ? "(Campur)"
+          : "(Makan)";
+  }
+
+  push({ text: twoCol(`No: ${data.receiptNo} ${orderTag}`, timeStr, cols) });
 
   if (data.customerName) push({ text: `Pelanggan: ${data.customerName}` });
   push({ text: rule(cols) });
 
   for (const item of data.items) {
-    push({ text: item.name });
+    const isItemBungkus = item.orderType === "take_away";
+    const displayName = isItemBungkus ? `${item.name} (Bks)` : item.name;
+    push({ text: displayName });
     push({
       text: twoCol(
         `  ${formatPlain(item.qty)} x ${formatPlain(item.price)}`,
@@ -88,13 +101,19 @@ export function buildWaText(data: ReceiptData): string {
   const timeStr = dt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
   const out: string[] = [];
   out.push(`*${data.storeName}*`);
-  out.push(`Struk: ${data.receiptNo} • ${timeStr}`);
-  const orderLabelWa = data.orderType === "take_away" ? "Bungkus" : "Makan di Tempat";
-  out.push(`Pesanan: ${orderLabelWa}`);
+  const orderLabelWa =
+    data.orderType === "take_away"
+      ? "Bungkus"
+      : data.orderType === "mixed"
+        ? "Campur (Makan & Bungkus)"
+        : "Makan di Tempat";
+  out.push(`Struk: ${data.receiptNo} • ${timeStr} (${orderLabelWa})`);
   if (data.customerName) out.push(`Pelanggan: ${data.customerName}`);
   out.push("──────────────");
   for (const item of data.items) {
-    out.push(`${formatPlain(item.qty)}x ${item.name}`);
+    const isItemBungkus = item.orderType === "take_away";
+    const displayName = isItemBungkus ? `${item.name} (Bungkus)` : item.name;
+    out.push(`${formatPlain(item.qty)}x ${displayName}`);
     out.push(`   ${formatPlain(item.price)} = ${formatPlain(item.total)}`);
   }
   out.push("──────────────");

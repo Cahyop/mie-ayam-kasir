@@ -297,3 +297,21 @@ export function buildShiftWaText(summary: ShiftSummary, storeName: string): stri
 
   return out.join("\n");
 }
+
+export async function refreshClosedShiftSummary(shiftId: string): Promise<void> {
+  const history = (await getMeta<RegisterShift[]>(SHIFT_HISTORY_KEY)) || [];
+  const shiftIdx = history.findIndex((s) => s.id === shiftId && s.status === "closed");
+  if (shiftIdx === -1) return;
+  const shift = history[shiftIdx];
+  const summary = await calculateShiftSummary(
+    shift,
+    shift.actual_cash ?? shift.initial_cash,
+    shift.closed_at || undefined,
+  );
+  history[shiftIdx] = {
+    ...shift,
+    expected_cash: summary.expectedCash,
+    difference: summary.difference,
+  };
+  await setMeta(SHIFT_HISTORY_KEY, history);
+}

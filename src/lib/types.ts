@@ -22,7 +22,8 @@ export type Customer = {
 };
 
 export type PaymentMethod = "cash" | "qris";
-export type OrderType = "dine_in" | "take_away";
+export type ItemOrderType = "dine_in" | "take_away";
+export type OrderType = "dine_in" | "take_away" | "mixed";
 
 export type Transaction = {
   id: string;
@@ -51,6 +52,7 @@ export type TransactionItem = {
   qty: number;
   price: number;
   total: number;
+  order_type?: ItemOrderType;
   created_at?: string;
   updated_at: string;
 };
@@ -83,6 +85,15 @@ export type CartItem = {
   name: string;
   price: number;
   qty: number;
+  order_type?: ItemOrderType;
+};
+
+export type ReceiptItemData = {
+  name: string;
+  qty: number;
+  price: number;
+  total: number;
+  orderType?: ItemOrderType;
 };
 
 export type ReceiptData = {
@@ -92,7 +103,7 @@ export type ReceiptData = {
   storeAddress: string | null;
   storePhone: string | null;
   footer: string;
-  items: { name: string; qty: number; price: number; total: number }[];
+  items: ReceiptItemData[];
   subtotal: number;
   discount: number;
   total: number;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildReceiptLines, buildWaText, waHref, receiptCols } from "@/lib/receipt";
 import { formatRupiah, formatPlain, makeReceiptNo } from "@/lib/format";
-import { getNextReceiptNo } from "@/lib/sales";
+import { getNextReceiptNo, computeTransactionOrderType } from "@/lib/sales";
 import { buildShiftReceiptLines, buildShiftWaText } from "@/lib/shift";
 import { db, resetTransactionData } from "@/lib/db";
 import type { ReceiptData, ShiftSummary } from "@/lib/types";
@@ -92,7 +92,7 @@ describe("Receipt and format helpers", () => {
     const waText = buildWaText(dummyReceipt);
     expect(waText).toContain("*Mie Ayam Berkah*");
     expect(waText).toContain("TX-20261025-001");
-    expect(waText).toContain("Pesanan: Makan di Tempat");
+    expect(waText).toContain("(Makan di Tempat)");
     expect(waText).toContain("Pelanggan: Mas Joko");
     expect(waText).toContain("2x Mie Ayam Pangsit");
     expect(waText).toContain("Subtotal: Rp 40.000");
@@ -101,18 +101,45 @@ describe("Receipt and format helpers", () => {
     expect(waText).toContain("Kembalian: Rp 15.000");
   });
 
-  it("displays order type (Makan di Tempat / Bungkus) on receipt and WhatsApp text", () => {
+  it("displays paper-saving abbreviated order type (Mkn / Bks / Cpr) on receipt and WhatsApp text", () => {
+    // 58mm abbreviation test
     const dineInLines = buildReceiptLines({ ...dummyReceipt, orderType: "dine_in" }, "58");
-    expect(dineInLines.map((l) => l.text)).toContain("[ MAKAN DI TEMPAT ]");
+    expect(dineInLines.some((l) => l.text.includes("(Mkn)"))).toBe(true);
 
     const dineInWa = buildWaText({ ...dummyReceipt, orderType: "dine_in" });
-    expect(dineInWa).toContain("Pesanan: Makan di Tempat");
+    expect(dineInWa).toContain("(Makan di Tempat)");
 
     const takeAwayLines = buildReceiptLines({ ...dummyReceipt, orderType: "take_away" }, "58");
-    expect(takeAwayLines.map((l) => l.text)).toContain("[ BUNGKUS ]");
+    expect(takeAwayLines.some((l) => l.text.includes("(Bks)"))).toBe(true);
 
     const takeAwayWa = buildWaText({ ...dummyReceipt, orderType: "take_away" });
-    expect(takeAwayWa).toContain("Pesanan: Bungkus");
+    expect(takeAwayWa).toContain("(Bungkus)");
+
+    // Mixed test (Dine In + Bungkus)
+    const mixedReceipt: ReceiptData = {
+      ...dummyReceipt,
+      orderType: "mixed",
+      items: [
+        { name: "Mie Ayam Pangsit", qty: 1, price: 15000, total: 15000, orderType: "dine_in" },
+        { name: "Mie Ayam Pangsit", qty: 1, price: 15000, total: 15000, orderType: "take_away" },
+      ],
+    };
+    const mixedLines = buildReceiptLines(mixedReceipt, "58");
+    expect(mixedLines.some((l) => l.text.includes("(Cpr)"))).toBe(true);
+    expect(mixedLines.some((l) => l.text === "Mie Ayam Pangsit (Bks)")).toBe(true);
+
+    const mixedWa = buildWaText(mixedReceipt);
+    expect(mixedWa).toContain("Campur (Makan & Bungkus)");
+    expect(mixedWa).toContain("1x Mie Ayam Pangsit (Bungkus)");
+  });
+
+  it("computes transaction order type correctly (dine_in, take_away, mixed)", () => {
+    expect(computeTransactionOrderType([{ order_type: "dine_in" }])).toBe("dine_in");
+    expect(computeTransactionOrderType([{ order_type: "take_away" }])).toBe("take_away");
+    expect(
+      computeTransactionOrderType([{ order_type: "dine_in" }, { order_type: "take_away" }]),
+    ).toBe("mixed");
+    expect(computeTransactionOrderType([])).toBe("dine_in");
   });
 
   it("builds correct WhatsApp href with Indonesian phone normalization", () => {

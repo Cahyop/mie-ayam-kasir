@@ -5,13 +5,14 @@ import { db } from "@/lib/db";
 import { formatRupiah, formatDateId, formatTimeId, formatPlain } from "@/lib/format";
 import { getShiftHistory } from "@/lib/shift";
 import { ShiftDetailDialog } from "@/components/shift-detail-dialog";
+import { EditTransactionDialog } from "@/components/edit-transaction-dialog";
 import type { ReceiptData, RegisterShift, Transaction } from "@/lib/types";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ReceiptDialog } from "@/components/receipt-dialog";
 import { cn } from "@/lib/utils";
-import { Clock, FileText, ChevronRight, Store } from "lucide-react";
+import { Clock, FileText, ChevronRight, Store, Pencil } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/riwayat")({
   head: () => ({
@@ -34,6 +35,7 @@ export function RiwayatPage() {
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
 
   // Shift Detail Dialog State
   const [selectedShift, setSelectedShift] = useState<RegisterShift | null>(null);
@@ -77,7 +79,13 @@ export function RiwayatPage() {
       storeAddress: settings?.store_address ?? null,
       storePhone: settings?.store_phone ?? null,
       footer: settings?.receipt_footer ?? "",
-      items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, total: i.total })),
+      items: items.map((i) => ({
+        name: i.name,
+        qty: i.qty,
+        price: i.price,
+        total: i.total,
+        orderType: i.order_type,
+      })),
       subtotal: t.subtotal,
       discount: t.discount,
       total: t.total,
@@ -247,10 +255,16 @@ export function RiwayatPage() {
                               "text-[10px] px-1.5 py-0 h-4 font-normal",
                               t.order_type === "take_away"
                                 ? "border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
-                                : "border-primary/30 text-primary bg-primary/10",
+                                : t.order_type === "mixed"
+                                  ? "border-purple-500/40 text-purple-700 dark:text-purple-400 bg-purple-500/10"
+                                  : "border-primary/30 text-primary bg-primary/10",
                             )}
                           >
-                            {t.order_type === "take_away" ? "Bungkus" : "Makan di Tempat"}
+                            {t.order_type === "take_away"
+                              ? "Bungkus"
+                              : t.order_type === "mixed"
+                                ? "Campur"
+                                : "Makan di Tempat"}
                           </Badge>
                         </div>
                         <p className="text-[11px] text-muted-foreground">
@@ -309,10 +323,16 @@ export function RiwayatPage() {
                         "text-[10px] px-1.5 py-0 h-4 font-normal",
                         t.order_type === "take_away"
                           ? "border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
-                          : "border-primary/30 text-primary bg-primary/10",
+                          : t.order_type === "mixed"
+                            ? "border-purple-500/40 text-purple-700 dark:text-purple-400 bg-purple-500/10"
+                            : "border-primary/30 text-primary bg-primary/10",
                       )}
                     >
-                      {t.order_type === "take_away" ? "Bungkus" : "Makan di Tempat"}
+                      {t.order_type === "take_away"
+                        ? "Bungkus"
+                        : t.order_type === "mixed"
+                          ? "Campur"
+                          : "Makan di Tempat"}
                     </Badge>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
@@ -346,11 +366,25 @@ export function RiwayatPage() {
       <TransactionSheet
         transaction={openTx}
         onClose={() => setOpenId(null)}
+        onEdit={() => {
+          setEditingTx(openTx);
+        }}
         onReceipt={(data) => {
           setOpenId(null);
           setReceipt(data);
         }}
         buildReceipt={buildReceipt}
+      />
+
+      {/* Dialog Koreksi Transaksi */}
+      <EditTransactionDialog
+        transaction={editingTx}
+        open={!!editingTx}
+        onOpenChange={(o) => !o && setEditingTx(null)}
+        onSaved={() => {
+          setEditingTx(null);
+          setOpenId(null);
+        }}
       />
 
       {/* Dialog Cetak Struk Penjualan */}
@@ -380,11 +414,13 @@ async function loadItems(transactionId: string) {
 function TransactionSheet({
   transaction,
   onClose,
+  onEdit,
   onReceipt,
   buildReceipt,
 }: {
   transaction: Transaction | null;
   onClose: () => void;
+  onEdit: () => void;
   onReceipt: (data: ReceiptData) => void;
   buildReceipt: (t: Transaction, items: Awaited<ReturnType<typeof loadItems>>) => ReceiptData;
 }) {
@@ -408,19 +444,35 @@ function TransactionSheet({
                 "text-xs px-2 py-0.5 font-medium",
                 transaction.order_type === "take_away"
                   ? "border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
-                  : "border-primary/30 text-primary bg-primary/10",
+                  : transaction.order_type === "mixed"
+                    ? "border-purple-500/40 text-purple-700 dark:text-purple-400 bg-purple-500/10"
+                    : "border-primary/30 text-primary bg-primary/10",
               )}
             >
-              {transaction.order_type === "take_away" ? "Bungkus" : "Makan di Tempat"}
+              {transaction.order_type === "take_away"
+                ? "Bungkus"
+                : transaction.order_type === "mixed"
+                  ? "Campur"
+                  : "Makan di Tempat"}
             </Badge>
           </div>
         </SheetHeader>
         <div className="space-y-1 pb-2 text-sm mt-3">
           {items?.map((item) => (
-            <div key={item.id} className="flex justify-between">
-              <span>
-                {formatPlain(item.qty)}× {item.name}
-              </span>
+            <div key={item.id} className="flex justify-between items-center py-0.5">
+              <div className="flex items-center gap-1.5">
+                <span>
+                  {formatPlain(item.qty)}× {item.name}
+                </span>
+                {item.order_type === "take_away" && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] px-1 py-0 h-4 border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                  >
+                    Bungkus
+                  </Badge>
+                )}
+              </div>
               <span>{formatRupiah(item.total)}</span>
             </div>
           ))}
@@ -439,13 +491,22 @@ function TransactionSheet({
             </div>
           )}
         </div>
-        <div className="pt-2 pb-4">
+        <div className="pt-2 pb-4 grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onEdit}
+            className="w-full text-xs h-10 font-bold gap-1.5"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Koreksi Transaksi
+          </Button>
           <Button
             disabled={!data}
             onClick={() => data && onReceipt(data)}
             className="w-full text-xs h-10 font-bold"
           >
-            Cetak Ulang / Kirim Struk
+            Cetak Ulang
           </Button>
         </div>
       </SheetContent>
