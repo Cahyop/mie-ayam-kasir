@@ -14,7 +14,227 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      cash_flows: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          note: string | null
+          occurred_at: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          occurred_at?: string
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          occurred_at?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      customers: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          note: string | null
+          phone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          note?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          note?: string | null
+          phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          active: boolean
+          category: string
+          created_at: string
+          id: string
+          name: string
+          price: number
+          stock: number
+          track_stock: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          category?: string
+          created_at?: string
+          id?: string
+          name: string
+          price?: number
+          stock?: number
+          track_stock?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          price?: number
+          stock?: number
+          track_stock?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      settings: {
+        Row: {
+          paper_width: string
+          receipt_footer: string
+          store_address: string | null
+          store_name: string
+          store_phone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          paper_width?: string
+          receipt_footer?: string
+          store_address?: string | null
+          store_name?: string
+          store_phone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          paper_width?: string
+          receipt_footer?: string
+          store_address?: string | null
+          store_name?: string
+          store_phone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      transaction_items: {
+        Row: {
+          id: string
+          name: string
+          price: number
+          product_id: string | null
+          qty: number
+          total: number
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          price?: number
+          product_id?: string | null
+          qty?: number
+          total?: number
+          transaction_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          price?: number
+          product_id?: string | null
+          qty?: number
+          total?: number
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transaction_items_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transactions: {
+        Row: {
+          change_amount: number
+          created_at: string
+          customer_id: string | null
+          discount: number
+          id: string
+          note: string | null
+          paid_amount: number
+          payment_method: string
+          receipt_no: string
+          subtotal: number
+          total: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          change_amount?: number
+          created_at?: string
+          customer_id?: string | null
+          discount?: number
+          id?: string
+          note?: string | null
+          paid_amount?: number
+          payment_method?: string
+          receipt_no: string
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          change_amount?: number
+          created_at?: string
+          customer_id?: string | null
+          discount?: number
+          id?: string
+          note?: string | null
+          paid_amount?: number
+          payment_method?: string
+          receipt_no?: string
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
