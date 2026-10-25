@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { enqueueUpsert, getUserId } from "@/lib/sync";
@@ -29,7 +29,7 @@ import {
 import { ReceiptDialog } from "@/components/receipt-dialog";
 import { ClosingDialog } from "@/components/closing-dialog";
 import { DraftOrdersListDialog, SaveDraftDialog } from "@/components/draft-orders-dialog";
-import { deleteDraftOrder, saveDraftOrder } from "@/lib/drafts";
+import { deleteDraftOrder, ensureDraftOrdersRestored, saveDraftOrder } from "@/lib/drafts";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -100,6 +100,10 @@ function KasirPage() {
   const [saving, setSaving] = useState(false);
 
   // Draft / Pending Orders State
+  useEffect(() => {
+    void ensureDraftOrdersRestored();
+  }, []);
+
   const draftOrders =
     useLiveQuery(() => db.draft_orders.orderBy("updated_at").reverse().toArray(), []) ?? [];
   const [draftListOpen, setDraftListOpen] = useState(false);

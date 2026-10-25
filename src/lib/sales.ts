@@ -79,8 +79,11 @@ export async function getNextReceiptNo(date = new Date()): Promise<string> {
 }
 
 export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
-  const userId = getUserId();
-  if (!userId) throw new Error("Belum masuk akun");
+  const userId =
+    getUserId() ||
+    (await getMeta<string>("lastUserId")) ||
+    (typeof window !== "undefined" ? localStorage.getItem("pos_last_user_id") : null) ||
+    "anonymous";
 
   const now = new Date().toISOString();
   const subtotal = input.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -339,8 +342,11 @@ export async function saveCashFlow(input: {
   note: string | null;
   occurredAt: string;
 }) {
-  const userId = getUserId();
-  if (!userId) throw new Error("Belum masuk akun");
+  const userId =
+    getUserId() ||
+    (await getMeta<string>("lastUserId")) ||
+    (typeof window !== "undefined" ? localStorage.getItem("pos_last_user_id") : null) ||
+    "anonymous";
   const now = new Date().toISOString();
   const row = {
     id: uid(),

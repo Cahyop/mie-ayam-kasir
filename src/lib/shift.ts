@@ -1,5 +1,5 @@
 import { db, getMeta, setMeta } from "./db";
-import { formatPlain, formatRupiah, todayIso, uid } from "./format";
+import { formatPlain, formatRupiah, isToday, toLocalDateIso, todayIso, uid } from "./format";
 import { receiptCols } from "./receipt";
 import { saveCashFlow } from "./sales";
 import { getUserId } from "./sync";
@@ -7,11 +7,124 @@ import type { ReceiptLine, RegisterShift, ShiftSummary } from "./types";
 
 export const ACTIVE_SHIFT_KEY = "active_shift";
 export const SHIFT_HISTORY_KEY = "shift_history";
+export const POS_ACTIVE_SHIFT_KEY = "pos_active_shift";
+export const POS_SHIFT_HISTORY_KEY = "pos_shift_history";
+
+async function getShiftHistoryRaw(): Promise<RegisterShift[]> {
+  try {
+    let history = (await getMeta<RegisterShift[]>(SHIFT_HISTORY_KEY)) || [];
+    if (history.length === 0 && typeof window !== "undefined" && window.localStorage) {
+      const raw = localStorage.getItem(POS_SHIFT_HISTORY_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as RegisterShift[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            history = parsed;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return history;
+  } catch {
+    return [];
+  }
+}
+
+async function tryRecoverShiftFromCashFlows(): Promise<RegisterShift | null> {
+  try {
+    const flows = await db.cash_flows.toArray();
+    // Modal flows from today (or within last 24h)
+    const modalFlows = flows
+      .filter((f) => {
+        if (f.type !== "modal" || !f.occurred_at) return false;
+        const diffHours = (Date.now() - new Date(f.occurred_at).getTime()) / (1000 * 60 * 60);
+        return isToday(f.occurred_at) || (diffHours >= 0 && diffHours < 24);
+      })
+      .sort((a, b) => (b.occurred_at > a.occurred_at ? 1 : -1));
+
+    if (modalFlows.length === 0) return null;
+
+    const latestModal = modalFlows[0];
+
+    // Cek apakah modal ini sudah pernah ditutup dalam shift history
+    const history = await getShiftHistoryRaw();
+    const alreadyClosed = history.some((s) => {
+      if (s.status !== "closed") return false;
+      if (s.opened_at === latestModal.occurred_at) return true;
+      if (s.closed_at && s.closed_at >= latestModal.occurred_at) return true;
+      return false;
+    });
+
+    if (alreadyClosed) {
+      return null;
+    }
+
+    const userId = latestModal.user_id || getUserId() || "anonymous";
+    const reconstructed: RegisterShift = {
+      id: uid(),
+      user_id: userId,
+      date: toLocalDateIso(latestModal.occurred_at),
+      status: "open",
+      opened_at: latestModal.occurred_at,
+      closed_at: null,
+      initial_cash: Math.max(0, latestModal.amount || 0),
+      notes: latestModal.note ? latestModal.note.replace(/^Modal Kasir:\s*/, "") : null,
+    };
+
+    return reconstructed;
+  } catch {
+    return null;
+  }
+}
 
 export async function getActiveShift(): Promise<RegisterShift | null> {
   try {
-    const shift = await getMeta<RegisterShift>(ACTIVE_SHIFT_KEY);
+    let shift = await getMeta<RegisterShift>(ACTIVE_SHIFT_KEY);
+
+    // 1. Fallback dari backup localStorage jika meta IndexedDB hilang
+    if (!shift || shift.status !== "open") {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const raw = localStorage.getItem(POS_ACTIVE_SHIFT_KEY);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw) as RegisterShift;
+            if (parsed && parsed.status === "open") {
+              shift = parsed;
+              await setMeta(ACTIVE_SHIFT_KEY, shift);
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+
+    // 2. Auto-recover dari buku kas jika ada modal hari ini yang belum ditutup
+    if (!shift || shift.status !== "open") {
+      const recovered = await tryRecoverShiftFromCashFlows();
+      if (recovered) {
+        shift = recovered;
+        await setMeta(ACTIVE_SHIFT_KEY, shift);
+        if (typeof window !== "undefined" && window.localStorage) {
+          try {
+            localStorage.setItem(POS_ACTIVE_SHIFT_KEY, JSON.stringify(shift));
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+
     if (shift && shift.status === "open") {
+      if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          localStorage.setItem(POS_ACTIVE_SHIFT_KEY, JSON.stringify(shift));
+        } catch {
+          // ignore
+        }
+      }
       return shift;
     }
     return null;
@@ -22,7 +135,21 @@ export async function getActiveShift(): Promise<RegisterShift | null> {
 
 export async function getShiftHistory(): Promise<RegisterShift[]> {
   try {
-    const history = (await getMeta<RegisterShift[]>(SHIFT_HISTORY_KEY)) || [];
+    let history = (await getMeta<RegisterShift[]>(SHIFT_HISTORY_KEY)) || [];
+    if (history.length === 0 && typeof window !== "undefined" && window.localStorage) {
+      const raw = localStorage.getItem(POS_SHIFT_HISTORY_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as RegisterShift[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            history = parsed;
+            await setMeta(SHIFT_HISTORY_KEY, history);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
     const active = await getActiveShift();
     if (active) {
       return [active, ...history.filter((s) => s.id !== active.id)];
@@ -50,19 +177,24 @@ export async function openShift(initialCash: number, notes?: string): Promise<Re
   };
 
   await setMeta(ACTIVE_SHIFT_KEY, shift);
-
-  // Catat modal awal otomatis ke buku kas agar tersinkronisasi
-  if (initialCash > 0) {
+  if (typeof window !== "undefined" && window.localStorage) {
     try {
-      await saveCashFlow({
-        type: "modal",
-        amount: initialCash,
-        note: notes ? `Modal Kasir: ${notes}` : "Modal Awal Buka Kasir",
-        occurredAt: now,
-      });
+      localStorage.setItem(POS_ACTIVE_SHIFT_KEY, JSON.stringify(shift));
     } catch {
       // ignore
     }
+  }
+
+  // Catat modal awal otomatis ke buku kas agar tersinkronisasi
+  try {
+    await saveCashFlow({
+      type: "modal",
+      amount: Math.max(0, initialCash),
+      note: notes ? `Modal Kasir: ${notes}` : "Modal Awal Buka Kasir",
+      occurredAt: now,
+    });
+  } catch {
+    // ignore
   }
 
   return shift;
@@ -142,18 +274,34 @@ export async function closeShift(
     notes: closingNotes ? `${shift.notes ? shift.notes + " | " : ""}${closingNotes}` : shift.notes,
   };
 
-  // Simpan ke riwayat shift di meta
+  // Simpan ke riwayat shift di meta & localStorage
   try {
     const history = (await getMeta<RegisterShift[]>(SHIFT_HISTORY_KEY)) || [];
     const filtered = history.filter((s) => s.id !== updatedShift.id);
     filtered.unshift(updatedShift);
-    await setMeta(SHIFT_HISTORY_KEY, filtered.slice(0, 100));
+    const sliced = filtered.slice(0, 100);
+    await setMeta(SHIFT_HISTORY_KEY, sliced);
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        localStorage.setItem(POS_SHIFT_HISTORY_KEY, JSON.stringify(sliced));
+        localStorage.removeItem(POS_ACTIVE_SHIFT_KEY);
+      } catch {
+        // ignore
+      }
+    }
   } catch {
     // ignore
   }
 
   // Set active shift ke null / reset
   await setMeta(ACTIVE_SHIFT_KEY, null);
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.removeItem(POS_ACTIVE_SHIFT_KEY);
+    } catch {
+      // ignore
+    }
+  }
 
   return summary;
 }
@@ -314,4 +462,11 @@ export async function refreshClosedShiftSummary(shiftId: string): Promise<void> 
     difference: summary.difference,
   };
   await setMeta(SHIFT_HISTORY_KEY, history);
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.setItem(POS_SHIFT_HISTORY_KEY, JSON.stringify(history));
+    } catch {
+      // ignore
+    }
+  }
 }

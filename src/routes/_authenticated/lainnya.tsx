@@ -50,7 +50,6 @@ export function LainnyaPage() {
     setLoggingOut(true);
     try {
       await supabase.auth.signOut();
-      await clearUserData();
       toast.success("Berhasil keluar akun");
       navigate({ to: "/auth" });
     } catch {

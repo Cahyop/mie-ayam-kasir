@@ -4,6 +4,39 @@ import { uid } from "./format";
 import { computeTransactionOrderType } from "./sales";
 import type { CartItem, DraftOrder, OrderType } from "./types";
 
+export const POS_DRAFT_ORDERS_KEY = "pos_draft_orders";
+
+async function syncDraftsToLocalStorage(): Promise<void> {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const drafts = await db.draft_orders.toArray();
+    localStorage.setItem(POS_DRAFT_ORDERS_KEY, JSON.stringify(drafts));
+  } catch {
+    // ignore
+  }
+}
+
+export async function ensureDraftOrdersRestored(): Promise<DraftOrder[]> {
+  try {
+    const count = await db.draft_orders.count();
+    if (count === 0 && typeof window !== "undefined" && window.localStorage) {
+      const raw = localStorage.getItem(POS_DRAFT_ORDERS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as DraftOrder[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          await db.draft_orders.bulkPut(parsed);
+          return await db.draft_orders.orderBy("updated_at").reverse().toArray();
+        }
+      }
+    } else if (count > 0) {
+      await syncDraftsToLocalStorage();
+    }
+    return await db.draft_orders.orderBy("updated_at").reverse().toArray();
+  } catch {
+    return [];
+  }
+}
+
 export type SaveDraftInput = {
   id?: string | null;
   tableNo: string | null;
@@ -47,6 +80,7 @@ export async function saveDraftOrder(input: SaveDraftInput): Promise<DraftOrder>
         updated_at: now,
       };
       await db.draft_orders.put(updated);
+      await syncDraftsToLocalStorage();
       return updated;
     }
   }
@@ -65,11 +99,13 @@ export async function saveDraftOrder(input: SaveDraftInput): Promise<DraftOrder>
     updated_at: now,
   };
   await db.draft_orders.put(newDraft);
+  await syncDraftsToLocalStorage();
   return newDraft;
 }
 
 export async function deleteDraftOrder(id: string): Promise<void> {
   await db.draft_orders.delete(id);
+  await syncDraftsToLocalStorage();
 }
 
 export async function getDraftOrder(id: string): Promise<DraftOrder | undefined> {
@@ -77,7 +113,11 @@ export async function getDraftOrder(id: string): Promise<DraftOrder | undefined>
 }
 
 export async function getDraftOrders(): Promise<DraftOrder[]> {
-  return db.draft_orders.orderBy("updated_at").reverse().toArray();
+  const list = await db.draft_orders.orderBy("updated_at").reverse().toArray();
+  if (list.length === 0) {
+    return ensureDraftOrdersRestored();
+  }
+  return list;
 }
 
 export function formatTimeAgo(dateIso: string): string {

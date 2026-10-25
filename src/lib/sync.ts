@@ -350,12 +350,22 @@ export async function syncNow(): Promise<void> {
 }
 
 async function handleUserSwitch(userId: string) {
-  const previous = await getMeta<string>("lastUserId");
+  let previous = await getMeta<string>("lastUserId");
+  if (!previous && typeof window !== "undefined" && window.localStorage) {
+    previous = localStorage.getItem("pos_last_user_id") || undefined;
+  }
   if (previous && previous !== userId) {
     await clearUserData();
   }
   currentUserId = userId;
   await setMeta("lastUserId", userId);
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.setItem("pos_last_user_id", userId);
+    } catch {
+      // ignore
+    }
+  }
   await updatePendingCount();
   void syncNow();
 }
@@ -377,7 +387,6 @@ export function initSync(): () => void {
     const userId = session?.user?.id ?? null;
     if (event === "SIGNED_OUT") {
       currentUserId = null;
-      void clearUserData();
       setStatus("idle");
       return;
     }

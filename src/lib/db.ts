@@ -65,6 +65,15 @@ export async function resetTransactionData(): Promise<void> {
     db.meta.delete("active_shift"),
     db.meta.delete("shift_history"),
   ]);
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.removeItem("pos_active_shift");
+      localStorage.removeItem("pos_shift_history");
+      localStorage.removeItem("pos_draft_orders");
+    } catch {
+      // ignore
+    }
+  }
   try {
     await db.outbox
       .filter((entry) => ["transactions", "transaction_items", "cash_flows"].includes(entry.table))
@@ -90,5 +99,16 @@ export async function clearUserData(): Promise<void> {
     db.settings.clear(),
     db.outbox.clear(),
     db.meta.clear(),
+    db.draft_orders.clear(),
   ]);
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.removeItem("pos_active_shift");
+      localStorage.removeItem("pos_shift_history");
+      localStorage.removeItem("pos_draft_orders");
+      localStorage.removeItem("pos_last_user_id");
+    } catch {
+      // ignore
+    }
+  }
 }
