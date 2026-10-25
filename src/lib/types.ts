@@ -37,6 +37,7 @@ export type Transaction = {
   note: string | null;
   created_at: string;
   updated_at: string;
+  shift_id?: string | null;
 };
 
 export type TransactionItem = {

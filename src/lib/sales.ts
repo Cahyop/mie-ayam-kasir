@@ -1,7 +1,7 @@
-import { db } from "./db";
+import { db, getMeta } from "./db";
 import { enqueueDelete, enqueueUpsert, getUserId } from "./sync";
 import { makeReceiptNo, uid } from "./format";
-import type { CartItem, PaymentMethod, Transaction, TransactionItem } from "./types";
+import type { CartItem, PaymentMethod, RegisterShift, Transaction, TransactionItem } from "./types";
 
 export type CheckoutInput = {
   cart: CartItem[];
@@ -60,6 +60,17 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   const change = input.paymentMethod === "cash" ? Math.max(0, paid - total) : 0;
   const receiptNo = await getNextReceiptNo();
 
+  // Ambil shift yang sedang aktif (buka) untuk menghubungkan transaksi ke shift ini
+  let shiftId: string | null = null;
+  try {
+    const activeShift = await getMeta<RegisterShift>("active_shift");
+    if (activeShift && activeShift.status === "open") {
+      shiftId = activeShift.id;
+    }
+  } catch {
+    // ignore
+  }
+
   const transaction: Transaction = {
     id: uid(),
     user_id: userId,
@@ -74,6 +85,7 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
     note: input.note,
     created_at: now,
     updated_at: now,
+    shift_id: shiftId,
   };
 
   const items: TransactionItem[] = input.cart.map((item) => ({

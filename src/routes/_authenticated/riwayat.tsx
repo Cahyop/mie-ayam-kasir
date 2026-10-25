@@ -3,17 +3,21 @@ import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { formatRupiah, formatDateId, formatTimeId, formatPlain } from "@/lib/format";
-import type { ReceiptData, Transaction } from "@/lib/types";
+import { getShiftHistory } from "@/lib/shift";
+import { ShiftDetailDialog } from "@/components/shift-detail-dialog";
+import type { ReceiptData, RegisterShift, Transaction } from "@/lib/types";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ReceiptDialog } from "@/components/receipt-dialog";
 import { cn } from "@/lib/utils";
+import { Clock, FileText, ChevronRight, Store } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/riwayat")({
   head: () => ({
     meta: [
       { title: "Riwayat — POS Mie Ayam" },
-      { name: "description", content: "Riwayat transaksi penjualan dan cetak ulang struk." },
+      { name: "description", content: "Riwayat sesi buka/tutup kasir dan transaksi penjualan." },
     ],
   }),
   component: RiwayatPage,
@@ -21,22 +25,48 @@ export const Route = createFileRoute("/_authenticated/riwayat")({
 
 export function RiwayatPage() {
   const transactions = useLiveQuery(
-    async () => db.transactions.orderBy("created_at").reverse().limit(300).toArray(),
+    async () => db.transactions.orderBy("created_at").reverse().limit(500).toArray(),
     [],
   );
+  const shifts = useLiveQuery(() => getShiftHistory(), []);
   const settings = useLiveQuery(async () => (await db.settings.toArray())[0], []);
   const customers = useLiveQuery(() => db.customers.toArray(), []);
+
   const [openId, setOpenId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ReceiptData | null>(null);
 
-  const open = transactions?.find((t) => t.id === openId) ?? null;
+  // Shift Detail Dialog State
+  const [selectedShift, setSelectedShift] = useState<RegisterShift | null>(null);
+  const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
 
-  const groups = new Map<string, Transaction[]>();
-  for (const t of transactions ?? []) {
-    const day = t.created_at.slice(0, 10);
-    if (!groups.has(day)) groups.set(day, []);
-    groups.get(day)!.push(t);
-  }
+  const openTx = transactions?.find((t) => t.id === openId) ?? null;
+
+  // Kelompokkan transaksi berdasarkan sesi buka kasir (Shift)
+  const shiftGroups = (shifts ?? []).map((shift) => {
+    const list = (transactions ?? []).filter((t) => {
+      if (t.shift_id) return t.shift_id === shift.id;
+      if (!t.created_at) return false;
+      return (
+        t.created_at >= shift.opened_at && (!shift.closed_at || t.created_at <= shift.closed_at)
+      );
+    });
+
+    const omset = list.reduce((sum, t) => sum + t.total, 0);
+    const cashCount = list.filter((t) => t.payment_method === "cash").length;
+    const qrisCount = list.filter((t) => t.payment_method === "qris").length;
+
+    return {
+      shift,
+      transactions: list,
+      omset,
+      cashCount,
+      qrisCount,
+    };
+  });
+
+  // Transaksi yang tidak terikat pada shift manapun (misal sebelum fitur shift ada)
+  const assignedTxIds = new Set(shiftGroups.flatMap((g) => g.transactions.map((t) => t.id)));
+  const unassignedTxs = (transactions ?? []).filter((t) => !assignedTxIds.has(t.id));
 
   function buildReceipt(t: Transaction, items: Awaited<ReturnType<typeof loadItems>>) {
     const customer = customers?.find((c) => c.id === t.customer_id);
@@ -58,50 +88,236 @@ export function RiwayatPage() {
     } satisfies ReceiptData;
   }
 
+  const hasAnyData = (shifts && shifts.length > 0) || (transactions && transactions.length > 0);
+
   return (
-    <div>
-      <h1 className="mb-3 text-lg font-bold">Riwayat Penjualan</h1>
-      {!transactions?.length && (
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          Belum ada transaksi. Mulai jualan di tab Kasir.
+    <div className="space-y-4 pb-10">
+      <div>
+        <h1 className="text-lg font-bold">Riwayat Sesi &amp; Penjualan</h1>
+        <p className="text-xs text-muted-foreground">
+          Transaksi dikelompokkan per sesi buka kasir (shift) lengkap dengan laporan closing.
         </p>
-      )}
-      {[...groups.entries()].map(([day, list]) => (
-        <div key={day} className="mb-5">
-          <p className="mb-2 text-xs font-semibold text-muted-foreground">
-            {formatDateId(list[0].created_at)}
+      </div>
+
+      {!hasAnyData && (
+        <div className="rounded-2xl border border-dashed border-border p-12 text-center">
+          <Store className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+          <p className="text-sm font-semibold">Belum Ada Transaksi</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Buka kasir dan mulai transaksi di tab Kasir untuk melihat riwayat di sini.
           </p>
-          <div className="space-y-2">
-            {list.map((t) => (
+        </div>
+      )}
+
+      {/* Daftar Sesi Buka/Tutup Kasir */}
+      {shiftGroups.map(({ shift, transactions: shiftTxs, omset, cashCount, qrisCount }) => {
+        const isOpen = shift.status === "open";
+        const dOpen = new Date(shift.opened_at);
+        const dClose = shift.closed_at ? new Date(shift.closed_at) : null;
+
+        const dateLabel = (dClose ?? dOpen).toLocaleDateString("id-ID", {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        });
+
+        const timeLabel = `${dOpen.toLocaleTimeString("id-ID", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })} – ${
+          dClose
+            ? dClose.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+            : "Sekarang"
+        }`;
+
+        return (
+          <section
+            key={shift.id}
+            className="rounded-2xl border border-border bg-card overflow-hidden shadow-xs"
+          >
+            {/* Header Sesi Kasir */}
+            <div className="border-b border-border bg-muted/40 p-3.5 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "h-2.5 w-2.5 rounded-full shrink-0",
+                      isOpen ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40",
+                    )}
+                  />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-foreground">
+                        {isOpen ? "Sesi Kasir Aktif (Sedang Buka)" : `Sesi Closing (${dateLabel})`}
+                      </span>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "text-[10px] px-1.5 py-0 h-4 font-bold",
+                          isOpen
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {isOpen ? "BUKA" : "DITUTUP"}
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {timeLabel}
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs font-semibold gap-1 px-2.5 shrink-0"
+                  onClick={() => {
+                    setSelectedShift(shift);
+                    setShiftDialogOpen(true);
+                  }}
+                >
+                  <FileText className="h-3.5 w-3.5 text-primary" />
+                  {isOpen ? "Rekap Shift" : "Laporan Closing"}
+                </Button>
+              </div>
+
+              {/* Ringkasan Angka Shift */}
+              <div className="grid grid-cols-3 gap-2 pt-1 text-xs">
+                <div className="rounded-xl border border-border/60 bg-background/60 p-2">
+                  <span className="text-[10px] text-muted-foreground block">Modal Awal</span>
+                  <span className="font-semibold text-foreground">
+                    {formatRupiah(shift.initial_cash)}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-background/60 p-2">
+                  <span className="text-[10px] text-muted-foreground block">
+                    Omset ({shiftTxs.length} nota)
+                  </span>
+                  <span className="font-bold text-primary">{formatRupiah(omset)}</span>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-background/60 p-2">
+                  <span className="text-[10px] text-muted-foreground block">
+                    {isOpen ? "Metode Bayar" : "Selisih Kas"}
+                  </span>
+                  <span
+                    className={cn(
+                      "font-semibold block truncate",
+                      !isOpen &&
+                        (shift.difference === 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : (shift.difference ?? 0) > 0
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-destructive"),
+                    )}
+                  >
+                    {isOpen
+                      ? `${cashCount} Tunai · ${qrisCount} QRIS`
+                      : shift.difference === 0
+                        ? "PAS (Rp 0)"
+                        : `${(shift.difference ?? 0) > 0 ? "+" : ""}${formatRupiah(shift.difference ?? 0)}`}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Daftar Transaksi dalam Sesi Ini */}
+            <div className="p-3">
+              {shiftTxs.length === 0 ? (
+                <p className="py-4 text-center text-xs text-muted-foreground">
+                  Belum ada transaksi penjualan pada sesi kasir ini.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {shiftTxs.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setOpenId(t.id)}
+                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-foreground">{t.receipt_no}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {formatTimeId(t.created_at)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-foreground">
+                            {formatRupiah(t.total)}
+                          </p>
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              "text-[10px] px-1.5 py-0 h-4 font-semibold",
+                              t.payment_method === "cash"
+                                ? "text-emerald-700 dark:text-emerald-400"
+                                : "text-sky-700 dark:text-sky-400",
+                            )}
+                          >
+                            {t.payment_method === "cash" ? "Tunai" : "QRIS"}
+                          </Badge>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground/60" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        );
+      })}
+
+      {/* Transaksi yang Belum/Tidak Terikat Shift */}
+      {unassignedTxs.length > 0 && (
+        <section className="rounded-2xl border border-border bg-card p-3.5 space-y-2 shadow-xs">
+          <div className="border-b border-border pb-1.5">
+            <p className="text-xs font-bold text-muted-foreground">
+              Transaksi Lainnya ({unassignedTxs.length} nota)
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            {unassignedTxs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setOpenId(t.id)}
-                className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-3 text-left transition-colors hover:bg-accent/40 active:scale-[0.99]"
+                className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
               >
                 <div>
-                  <p className="text-sm font-semibold">{t.receipt_no}</p>
-                  <p className="text-xs text-muted-foreground">{formatTimeId(t.created_at)}</p>
+                  <p className="text-xs font-bold text-foreground">{t.receipt_no}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {formatDateId(t.created_at)} · {formatTimeId(t.created_at)}
+                  </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold">{formatRupiah(t.total)}</p>
-                  <Badge
-                    variant="secondary"
-                    className={cn(
-                      "mt-0.5",
-                      t.payment_method === "cash" ? "text-emerald-700" : "text-sky-700",
-                    )}
-                  >
-                    {t.payment_method === "cash" ? "Tunai" : "QRIS"}
-                  </Badge>
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-foreground">{formatRupiah(t.total)}</p>
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 h-4 font-semibold",
+                        t.payment_method === "cash"
+                          ? "text-emerald-700 dark:text-emerald-400"
+                          : "text-sky-700 dark:text-sky-400",
+                      )}
+                    >
+                      {t.payment_method === "cash" ? "Tunai" : "QRIS"}
+                    </Badge>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground/60" />
                 </div>
               </button>
             ))}
           </div>
-        </div>
-      ))}
+        </section>
+      )}
 
+      {/* Sheet Rincian Nota & Tombol Cetak Ulang Struk */}
       <TransactionSheet
-        transaction={open}
+        transaction={openTx}
         onClose={() => setOpenId(null)}
         onReceipt={(data) => {
           setOpenId(null);
@@ -110,9 +326,20 @@ export function RiwayatPage() {
         buildReceipt={buildReceipt}
       />
 
+      {/* Dialog Cetak Struk Penjualan */}
       <ReceiptDialog
         receipt={receipt}
         onClose={() => setReceipt(null)}
+        paperWidth={settings?.paper_width ?? "58"}
+      />
+
+      {/* Dialog Detail Shift / Cetak Ulang Laporan Closing */}
+      <ShiftDetailDialog
+        shift={selectedShift}
+        open={shiftDialogOpen}
+        onOpenChange={setShiftDialogOpen}
+        storeName={settings?.store_name ?? "Mie Ayam"}
+        storePhone={settings?.store_phone}
         paperWidth={settings?.paper_width ?? "58"}
       />
     </div>
@@ -148,7 +375,7 @@ function TransactionSheet({
         <SheetHeader>
           <SheetTitle>{transaction.receipt_no}</SheetTitle>
         </SheetHeader>
-        <div className="space-y-1 pb-2 text-sm">
+        <div className="space-y-1 pb-2 text-sm mt-3">
           {items?.map((item) => (
             <div key={item.id} className="flex justify-between">
               <span>
@@ -161,25 +388,25 @@ function TransactionSheet({
             <span>Total</span>
             <span>{formatRupiah(transaction.total)}</span>
           </div>
-          <div className="flex justify-between text-muted-foreground">
+          <div className="flex justify-between text-muted-foreground text-xs">
             <span>Bayar ({transaction.payment_method === "cash" ? "Tunai" : "QRIS"})</span>
             <span>{formatRupiah(transaction.paid_amount)}</span>
           </div>
-          {transaction.payment_method === "cash" && (
-            <div className="flex justify-between text-muted-foreground">
+          {transaction.payment_method === "cash" && transaction.change_amount > 0 && (
+            <div className="flex justify-between text-muted-foreground text-xs">
               <span>Kembalian</span>
               <span>{formatRupiah(transaction.change_amount)}</span>
             </div>
           )}
         </div>
-        <div className="grid grid-cols-2 gap-2 pb-4">
-          <button
+        <div className="pt-2 pb-4">
+          <Button
             disabled={!data}
             onClick={() => data && onReceipt(data)}
-            className="rounded-xl border border-border bg-card py-2.5 text-sm font-semibold disabled:opacity-50 hover:bg-accent/40"
+            className="w-full text-xs h-10 font-bold"
           >
-            Struk / Kirim
-          </button>
+            Cetak Ulang / Kirim Struk
+          </Button>
         </div>
       </SheetContent>
     </Sheet>

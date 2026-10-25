@@ -20,6 +20,19 @@ export async function getActiveShift(): Promise<RegisterShift | null> {
   }
 }
 
+export async function getShiftHistory(): Promise<RegisterShift[]> {
+  try {
+    const history = (await getMeta<RegisterShift[]>(SHIFT_HISTORY_KEY)) || [];
+    const active = await getActiveShift();
+    if (active) {
+      return [active, ...history.filter((s) => s.id !== active.id)];
+    }
+    return history;
+  } catch {
+    return [];
+  }
+}
+
 export async function openShift(initialCash: number, notes?: string): Promise<RegisterShift> {
   const userId = getUserId() || "anonymous";
   const now = new Date().toISOString();
@@ -64,7 +77,9 @@ export async function calculateShiftSummary(
 
   const [txs, flows] = await Promise.all([db.transactions.toArray(), db.cash_flows.toArray()]);
 
+  // Transaksi dalam shift ini: cocokkan shift_id jika ada, atau rentang waktu
   const shiftTxs = txs.filter((t) => {
+    if (t.shift_id) return t.shift_id === shift.id;
     if (!t.created_at) return false;
     return t.created_at >= shift.opened_at && t.created_at <= end;
   });
@@ -130,14 +145,15 @@ export async function closeShift(
   // Simpan ke riwayat shift di meta
   try {
     const history = (await getMeta<RegisterShift[]>(SHIFT_HISTORY_KEY)) || [];
-    history.unshift(updatedShift);
-    await setMeta(SHIFT_HISTORY_KEY, history.slice(0, 50));
+    const filtered = history.filter((s) => s.id !== updatedShift.id);
+    filtered.unshift(updatedShift);
+    await setMeta(SHIFT_HISTORY_KEY, filtered.slice(0, 100));
   } catch {
     // ignore
   }
 
-  // Set active shift ke closed / reset
-  await setMeta(ACTIVE_SHIFT_KEY, updatedShift);
+  // Set active shift ke null / reset
+  await setMeta(ACTIVE_SHIFT_KEY, null);
 
   return summary;
 }
