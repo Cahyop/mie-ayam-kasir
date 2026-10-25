@@ -47,15 +47,14 @@ export function isToday(iso: string): boolean {
   return iso.slice(0, 10) === todayIso();
 }
 
-export function makeReceiptNo(): string {
-  const d = new Date();
+export function makeReceiptNo(seq = 1, d = new Date()): string {
   const stamp = [
     d.getFullYear(),
     String(d.getMonth() + 1).padStart(2, "0"),
     String(d.getDate()).padStart(2, "0"),
   ].join("");
-  const rand = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
-  return `R${stamp}-${rand}`;
+  const seqStr = String(seq).padStart(4, "0");
+  return `R${stamp}-${seqStr}`;
 }
 
 export function uid(): string {

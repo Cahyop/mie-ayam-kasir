@@ -17,6 +17,37 @@ export type CheckoutResult = {
   items: TransactionItem[];
 };
 
+export async function getNextReceiptNo(date = new Date()): Promise<string> {
+  const stamp = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("");
+  const prefix = `R${stamp}-`;
+
+  try {
+    const txs = await db.transactions.toArray();
+    let maxSeq = 0;
+
+    for (const t of txs) {
+      if (t.receipt_no && t.receipt_no.startsWith(prefix)) {
+        const numPart = parseInt(t.receipt_no.slice(prefix.length), 10);
+        if (!isNaN(numPart)) {
+          // Abaikan jika ada nomor acak lama yang nilainya jauh melampaui jumlah transaksi
+          if (numPart > maxSeq && (numPart <= txs.length + 10 || txs.length > 500)) {
+            maxSeq = numPart;
+          }
+        }
+      }
+    }
+
+    const nextSeq = maxSeq > 0 ? maxSeq + 1 : 1;
+    return makeReceiptNo(nextSeq, date);
+  } catch {
+    return makeReceiptNo(1, date);
+  }
+}
+
 export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   const userId = getUserId();
   if (!userId) throw new Error("Belum masuk akun");
@@ -27,11 +58,12 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   const total = Math.max(0, subtotal - discount);
   const paid = input.paidAmount;
   const change = input.paymentMethod === "cash" ? Math.max(0, paid - total) : 0;
+  const receiptNo = await getNextReceiptNo();
 
   const transaction: Transaction = {
     id: uid(),
     user_id: userId,
-    receipt_no: makeReceiptNo(),
+    receipt_no: receiptNo,
     customer_id: input.customerId,
     payment_method: input.paymentMethod,
     subtotal,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildReceiptLines, buildWaText, waHref, receiptCols } from "@/lib/receipt";
 import { formatRupiah, formatPlain, makeReceiptNo } from "@/lib/format";
+import { getNextReceiptNo } from "@/lib/sales";
 import type { ReceiptData } from "@/lib/types";
 
 describe("Receipt and format helpers", () => {
@@ -91,9 +92,18 @@ describe("Receipt and format helpers", () => {
     expect(hrefNoPhone).toContain("api.whatsapp.com/send?text=");
   });
 
-  it("formats currency accurately", () => {
+  it("formats currency accurately and generates sequential receipt numbers", async () => {
     expect(formatRupiah(15000)).toBe("Rp 15.000");
     expect(formatPlain(15000)).toBe("15.000");
-    expect(makeReceiptNo()).toMatch(/^R\d{8}-\d{4}$/);
+
+    // Sequential receipt numbers
+    const fixedDate = new Date("2026-10-25T12:00:00Z");
+    expect(makeReceiptNo(1, fixedDate)).toBe("R20261025-0001");
+    expect(makeReceiptNo(2, fixedDate)).toBe("R20261025-0002");
+    expect(makeReceiptNo(42, fixedDate)).toBe("R20261025-0042");
+    expect(makeReceiptNo(100, fixedDate)).toBe("R20261025-0100");
+
+    const nextNo = await getNextReceiptNo(fixedDate);
+    expect(nextNo).toMatch(/^R20261025-\d{4}$/);
   });
 });
