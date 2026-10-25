@@ -225,11 +225,7 @@ export async function connectPrinter(forceNew = false): Promise<PrinterConnectio
   return await attachDevice(device);
 }
 
-export async function buildEscposBytes(
-  data: ReceiptData,
-  paperWidth: "58" | "80",
-): Promise<Uint8Array> {
-  const lines: ReceiptLine[] = buildReceiptLines(data, paperWidth);
+export function buildLinesToEscpos(lines: ReceiptLine[], paperWidth: "58" | "80"): Uint8Array {
   const chunks: number[] = [];
   const encoder = new TextEncoder();
 
@@ -255,7 +251,7 @@ export async function buildEscposBytes(
     }
 
     // GS ! n — Character size
-    // 0x11 = double width & height (Store Name)
+    // 0x11 = double width & height (Header)
     // 0x01 = double height (TOTAL)
     // 0x00 = standard Font A
     const charSize = line.large ? 0x11 : line.doubleHeight ? 0x01 : 0x00;
@@ -277,7 +273,7 @@ export async function buildEscposBytes(
   }
 
   // Footer feed:
-  // For 58mm portable printers (manual tear bar): feed just 2 lines so the text clears the cutter cleanly without wasting 5cm of paper!
+  // For 58mm portable printers (manual tear bar): feed just 2 lines
   chunks.push(0x0a, 0x0a);
 
   // For 80mm printers with auto-cutter:
@@ -288,6 +284,36 @@ export async function buildEscposBytes(
   return new Uint8Array(chunks);
 }
 
+export async function buildEscposBytes(
+  data: ReceiptData,
+  paperWidth: "58" | "80",
+): Promise<Uint8Array> {
+  const lines: ReceiptLine[] = buildReceiptLines(data, paperWidth);
+  return buildLinesToEscpos(lines, paperWidth);
+}
+
+/**
+ * Prints any generic receipt lines via Bluetooth printer.
+ */
+export async function printLinesViaBluetooth(
+  lines: ReceiptLine[],
+  paperWidth: "58" | "80",
+): Promise<string> {
+  const connection = await connectPrinter();
+  try {
+    const bytes = buildLinesToEscpos(lines, paperWidth);
+    await connection.print(bytes);
+    if (!isKeepConnectedEnabled()) {
+      connection.disconnect();
+    }
+    return connection.deviceName;
+  } catch (error) {
+    cachedCharacteristic = null;
+    notifyStatus();
+    throw error;
+  }
+}
+
 /**
  * Prints to Bluetooth printer and KEEPS CONNECTION ALIVE so next prints are instantaneous.
  */
@@ -295,19 +321,6 @@ export async function printViaBluetooth(
   data: ReceiptData,
   paperWidth: "58" | "80",
 ): Promise<string> {
-  const connection = await connectPrinter();
-  try {
-    const bytes = await buildEscposBytes(data, paperWidth);
-    await connection.print(bytes);
-    // If keep-connected is false, disconnect immediately
-    if (!isKeepConnectedEnabled()) {
-      connection.disconnect();
-    }
-    return connection.deviceName;
-  } catch (error) {
-    // If printing failed because connection dropped, clear characteristic
-    cachedCharacteristic = null;
-    notifyStatus();
-    throw error;
-  }
+  const lines = buildReceiptLines(data, paperWidth);
+  return await printLinesViaBluetooth(lines, paperWidth);
 }

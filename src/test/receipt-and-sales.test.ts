@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildReceiptLines, buildWaText, waHref, receiptCols } from "@/lib/receipt";
 import { formatRupiah, formatPlain, makeReceiptNo } from "@/lib/format";
 import { getNextReceiptNo } from "@/lib/sales";
-import type { ReceiptData } from "@/lib/types";
+import { buildShiftReceiptLines, buildShiftWaText } from "@/lib/shift";
+import type { ReceiptData, ShiftSummary } from "@/lib/types";
 
 describe("Receipt and format helpers", () => {
   const dummyReceipt: ReceiptData = {
@@ -105,5 +106,43 @@ describe("Receipt and format helpers", () => {
 
     const nextNo = await getNextReceiptNo(fixedDate);
     expect(nextNo).toMatch(/^R20261025-\d{4}$/);
+  });
+
+  it("generates valid closing shift receipt lines and WhatsApp message", () => {
+    const dummySummary: ShiftSummary = {
+      shiftId: "shift-001",
+      openedAt: "2026-10-25T08:00:00.000Z",
+      closedAt: "2026-10-25T20:00:00.000Z",
+      initialCash: 100000,
+      cashSales: 450000,
+      cashTxCount: 25,
+      qrisSales: 150000,
+      qrisTxCount: 10,
+      totalSales: 600000,
+      totalTxCount: 35,
+      cashIn: 0,
+      cashOut: 25000,
+      expectedCash: 525000,
+      actualCash: 525000,
+      difference: 0,
+      notes: "Sisa receh aman",
+    };
+
+    const lines = buildShiftReceiptLines(dummySummary, "Mie Ayam Berkah", "58");
+    const texts = lines.map((l) => l.text);
+    expect(texts).toContain("Mie Ayam Berkah");
+    expect(texts).toContain("LAPORAN CLOSING KASIR");
+    expect(texts.some((t) => t.includes("Modal Awal") && t.includes("100.000"))).toBe(true);
+    expect(texts.some((t) => t.includes("Jual Tunai (25)") && t.includes("450.000"))).toBe(true);
+    expect(texts.some((t) => t.includes("Jual QRIS (10)") && t.includes("150.000"))).toBe(true);
+    expect(texts.some((t) => t.includes("TOTAL OMSET (35)") && t.includes("600.000"))).toBe(true);
+    expect(texts.some((t) => t.includes("SELISIH KAS") && t.includes("PAS"))).toBe(true);
+
+    const waText = buildShiftWaText(dummySummary, "Mie Ayam Berkah");
+    expect(waText).toContain("*LAPORAN CLOSING KASIR*");
+    expect(waText).toContain("*Mie Ayam Berkah*");
+    expect(waText).toContain("Modal Awal:* Rp 100.000");
+    expect(waText).toContain("Total Omset:* Rp 600.000 (35 nota)");
+    expect(waText).toContain("Selisih:* *PAS (Rp 0)*");
   });
 });

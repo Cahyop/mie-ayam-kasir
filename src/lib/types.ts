@@ -118,3 +118,36 @@ export const SYNC_TABLES: OutboxTable[] = [
   "transaction_items",
   "cash_flows",
 ];
+
+export type RegisterShift = {
+  id: string;
+  user_id: string;
+  date: string;
+  status: "open" | "closed";
+  opened_at: string;
+  closed_at: string | null;
+  initial_cash: number;
+  actual_cash?: number | null;
+  expected_cash?: number | null;
+  difference?: number | null;
+  notes?: string | null;
+};
+
+export type ShiftSummary = {
+  shiftId: string;
+  openedAt: string;
+  closedAt: string;
+  initialCash: number;
+  cashSales: number;
+  cashTxCount: number;
+  qrisSales: number;
+  qrisTxCount: number;
+  totalSales: number;
+  totalTxCount: number;
+  cashIn: number;
+  cashOut: number;
+  expectedCash: number;
+  actualCash: number;
+  difference: number;
+  notes?: string | null;
+};

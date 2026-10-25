@@ -4,12 +4,14 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { deleteCashFlow, saveCashFlow } from "@/lib/sales";
 import { formatRupiah, formatPlain, parseNumberInput, formatTimeId } from "@/lib/format";
+import { getActiveShift } from "@/lib/shift";
+import { ClosingDialog } from "@/components/closing-dialog";
 import type { CashFlow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Trash2 } from "lucide-react";
+import { Trash2, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/kas")({
@@ -34,6 +36,10 @@ const DIALOG_LABEL: Record<"modal" | "in" | "out", string> = {
 };
 
 function KasPage() {
+  const activeShift = useLiveQuery(() => getActiveShift(), []);
+  const settings = useLiveQuery(async () => (await db.settings.toArray())[0], []);
+  const [closingDialogOpen, setClosingDialogOpen] = useState(false);
+
   const flows = useLiveQuery(() => db.cash_flows.orderBy("occurred_at").reverse().toArray(), []);
   const transactions = useLiveQuery(
     async () => db.transactions.orderBy("created_at").reverse().limit(500).toArray(),
@@ -78,7 +84,32 @@ function KasPage() {
 
   return (
     <div>
-      <h1 className="mb-3 text-lg font-bold">Kas Hari Ini</h1>
+      <div className="mb-3 flex items-center justify-between">
+        <h1 className="text-lg font-bold">Kas Hari Ini</h1>
+        {activeShift && activeShift.status === "open" && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setClosingDialogOpen(true)}
+            className="h-8 gap-1.5 text-xs font-semibold text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <Clock className="h-3.5 w-3.5" />
+            Tutup Kasir (Closing)
+          </Button>
+        )}
+      </div>
+
+      {activeShift && activeShift.status === "open" && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl bg-card border border-border p-2.5 text-xs shadow-xs">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <span className="font-medium text-muted-foreground">
+            Kasir Aktif sejak{" "}
+            <strong className="text-foreground">{formatTimeId(activeShift.opened_at)}</strong>{" "}
+            (Modal:{" "}
+            <strong className="text-foreground">{formatRupiah(activeShift.initial_cash)}</strong>)
+          </span>
+        </div>
+      )}
 
       <div className="mb-4 rounded-2xl bg-primary p-4 text-primary-foreground">
         <p className="text-xs opacity-80">Saldo kas (tunai)</p>
@@ -123,7 +154,7 @@ function KasPage() {
                 className={
                   flow.type === "out"
                     ? "text-sm font-bold text-destructive"
-                    : "text-sm font-bold text-emerald-700"
+                    : "text-sm font-bold text-emerald-700 dark:text-emerald-400"
                 }
               >
                 {flow.type === "out" ? "−" : "+"}
@@ -131,7 +162,7 @@ function KasPage() {
               </span>
               <button
                 onClick={() => void deleteCashFlow(flow.id)}
-                className="text-muted-foreground"
+                className="text-muted-foreground hover:text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -175,6 +206,19 @@ function KasPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Shift Closing Dialog */}
+      <ClosingDialog
+        open={closingDialogOpen}
+        onOpenChange={setClosingDialogOpen}
+        shift={activeShift ?? null}
+        storeName={settings?.store_name ?? "Mie Ayam"}
+        storePhone={settings?.store_phone}
+        paperWidth={settings?.paper_width ?? "58"}
+        onClosed={() => {
+          setClosingDialogOpen(false);
+        }}
+      />
     </div>
   );
 }
