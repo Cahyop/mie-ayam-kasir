@@ -66,6 +66,12 @@ export async function resetTransactionData(): Promise<void> {
   } catch {
     // ignore
   }
+  try {
+    const { updatePendingCount } = await import("./sync");
+    await updatePendingCount();
+  } catch {
+    // ignore
+  }
 }
 
 export async function clearUserData(): Promise<void> {

@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { clearUserData } from "@/lib/db";
-import { getSyncState, subscribeSync, syncNow } from "@/lib/sync";
+import { clearOutboxQueue, getSyncState, subscribeSync, syncNow } from "@/lib/sync";
 import { Button } from "@/components/ui/button";
 import {
   Users,
@@ -69,6 +69,15 @@ export function LainnyaPage() {
       toast.error("Sinkronisasi gagal");
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function handleClearOutbox() {
+    try {
+      await clearOutboxQueue();
+      toast.success("Antrean data tertunda berhasil dibersihkan");
+    } catch {
+      toast.error("Gagal membersihkan antrean");
     }
   }
 
@@ -145,16 +154,29 @@ export function LainnyaPage() {
               </p>
             </div>
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleSync}
-            disabled={syncing || syncState.status === "offline"}
-            className="h-8 gap-1 text-xs"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
-            Sinkron
-          </Button>
+          <div className="flex items-center gap-1.5">
+            {syncState.pendingCount > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleClearOutbox}
+                className="h-8 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                title="Hapus antrean jika ada data rusak yang menghambat"
+              >
+                Bersihkan Antrean
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleSync}
+              disabled={syncing || syncState.status === "offline"}
+              className="h-8 gap-1 text-xs"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+              Sinkron
+            </Button>
+          </div>
         </div>
       </div>
 

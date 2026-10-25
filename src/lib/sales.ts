@@ -1,5 +1,5 @@
 import { db, getMeta } from "./db";
-import { enqueueDelete, enqueueUpsert, getUserId } from "./sync";
+import { enqueueDelete, enqueueUpsert, getUserId, scheduleSync, updatePendingCount } from "./sync";
 import { makeReceiptNo, uid } from "./format";
 import { refreshClosedShiftSummary } from "./shift";
 import type {
@@ -177,6 +177,9 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
     },
   );
 
+  await updatePendingCount();
+  scheduleSync(500);
+
   return { transaction, items };
 }
 
@@ -301,6 +304,9 @@ export async function updateTransaction(input: UpdateTransactionInput): Promise<
       }
     },
   );
+
+  await updatePendingCount();
+  scheduleSync(500);
 
   // If shift is closed, update shift summary so closing report stays accurate
   if (existingTx.shift_id) {

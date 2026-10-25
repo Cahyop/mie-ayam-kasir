@@ -11,6 +11,88 @@ const NUMERIC_FIELDS: Record<OutboxTable, string[]> = {
   settings: [],
 };
 
+export const SUPABASE_COLUMNS: Record<OutboxTable, string[]> = {
+  products: [
+    "id",
+    "user_id",
+    "name",
+    "category",
+    "price",
+    "stock",
+    "track_stock",
+    "active",
+    "created_at",
+    "updated_at",
+  ],
+  customers: ["id", "user_id", "name", "phone", "note", "created_at", "updated_at"],
+  transactions: [
+    "id",
+    "user_id",
+    "receipt_no",
+    "customer_id",
+    "payment_method",
+    "subtotal",
+    "discount",
+    "total",
+    "paid_amount",
+    "change_amount",
+    "note",
+    "created_at",
+    "updated_at",
+  ],
+  transaction_items: [
+    "id",
+    "user_id",
+    "transaction_id",
+    "product_id",
+    "name",
+    "qty",
+    "price",
+    "total",
+    "updated_at",
+  ],
+  cash_flows: [
+    "id",
+    "user_id",
+    "type",
+    "amount",
+    "note",
+    "occurred_at",
+    "created_at",
+    "updated_at",
+  ],
+  settings: [
+    "user_id",
+    "store_name",
+    "store_address",
+    "store_phone",
+    "receipt_footer",
+    "paper_width",
+    "updated_at",
+  ],
+};
+
+function sanitizeRowForSupabase(
+  table: OutboxTable,
+  row: Record<string, unknown>,
+  userId: string | null,
+): Record<string, unknown> {
+  const allowed = SUPABASE_COLUMNS[table] || [];
+  const out: Record<string, unknown> = {};
+  for (const col of allowed) {
+    if (row[col] !== undefined) {
+      out[col] = row[col];
+    }
+  }
+  for (const field of NUMERIC_FIELDS[table] ?? []) {
+    if (out[field] != null) out[field] = Number(out[field]);
+  }
+  if (userId && (!out.user_id || out.user_id === "anonymous")) {
+    out.user_id = userId;
+  }
+  return out;
+}
+
 function normalizeRow(table: OutboxTable, row: Record<string, unknown>) {
   const out = { ...row };
   for (const field of NUMERIC_FIELDS[table] ?? []) {
@@ -58,12 +140,17 @@ function setStatus(next: SyncStatus) {
   }
 }
 
-async function updatePendingCount() {
+export async function updatePendingCount(): Promise<void> {
   const count = await db.outbox.count();
   if (count !== pendingCount) {
     pendingCount = count;
     notify();
   }
+}
+
+export async function clearOutboxQueue(): Promise<void> {
+  await db.outbox.clear();
+  await updatePendingCount();
 }
 
 export function scheduleSync(delayMs = 2000) {
@@ -96,12 +183,27 @@ async function flushOutbox(): Promise<void> {
   for (const entry of entries) {
     try {
       if (entry.op === "upsert") {
-        const { error } = await supabase.from(entry.table).upsert(entry.row);
+        const payload = sanitizeRowForSupabase(entry.table, entry.row, currentUserId);
+        const { error } = await supabase.from(entry.table).upsert(payload);
         if (error) {
-          // Structural errors would retry forever — drop the entry instead.
-          if (error.code && !["23503", "409", "57001"].includes(error.code)) {
-            console.error("Sync upsert failed permanently", entry.table, error);
+          console.error("Sync upsert error on", entry.table, error);
+          const msg = (error.message || "").toLowerCase();
+          const isNetworkError =
+            msg.includes("failed to fetch") ||
+            msg.includes("networkerror") ||
+            msg.includes("timeout") ||
+            error.code === "57001";
+
+          if (!isNetworkError) {
+            // Drop permanent/schema error entry to prevent queue blocking
+            console.warn(
+              "Dropping permanent error outbox entry:",
+              entry.table,
+              entry.seq,
+              error.message,
+            );
             await db.outbox.delete(entry.seq!);
+            await updatePendingCount();
             continue;
           }
           throw error;
@@ -113,9 +215,23 @@ async function flushOutbox(): Promise<void> {
           .delete()
           .eq(pk, entry.row.id as string);
         if (error) {
-          if (error.code && !["23503", "409", "57001"].includes(error.code)) {
-            console.error("Sync delete failed permanently", entry.table, error);
+          console.error("Sync delete error on", entry.table, error);
+          const msg = (error.message || "").toLowerCase();
+          const isNetworkError =
+            msg.includes("failed to fetch") ||
+            msg.includes("networkerror") ||
+            msg.includes("timeout") ||
+            error.code === "57001";
+
+          if (!isNetworkError) {
+            console.warn(
+              "Dropping permanent error outbox entry:",
+              entry.table,
+              entry.seq,
+              error.message,
+            );
             await db.outbox.delete(entry.seq!);
+            await updatePendingCount();
             continue;
           }
           throw error;
@@ -123,8 +239,8 @@ async function flushOutbox(): Promise<void> {
       }
       await db.outbox.delete(entry.seq!);
       await updatePendingCount();
-    } catch {
-      // Network/auth problem — stop flushing, retry on next tick.
+    } catch (err: unknown) {
+      console.warn("Sync queue paused due to network issue:", err);
       return;
     }
   }
@@ -188,7 +304,18 @@ export async function syncNow(): Promise<void> {
     pendingSync = true;
     return;
   }
-  if (!currentUserId) return;
+  if (!currentUserId) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user?.id) {
+        currentUserId = data.session.user.id;
+      } else {
+        return;
+      }
+    } catch {
+      return;
+    }
+  }
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     setStatus("offline");
     return;
@@ -209,7 +336,7 @@ export async function syncNow(): Promise<void> {
     lastError = null;
     setStatus(navigator.onLine ? "idle" : "offline");
   } catch (error) {
-    lastError = String(error);
+    lastError = error instanceof Error ? error.message : String(error);
     setStatus("error");
   } finally {
     syncing = false;
