@@ -1,18 +1,27 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { deleteCashFlow, saveCashFlow } from "@/lib/sales";
-import { formatRupiah, formatPlain, parseNumberInput, formatTimeId } from "@/lib/format";
+import {
+  formatRupiah,
+  formatPlain,
+  parseNumberInput,
+  formatTimeId,
+  todayIso,
+  toLocalDateIso,
+} from "@/lib/format";
 import { getActiveShift } from "@/lib/shift";
 import { ClosingDialog } from "@/components/closing-dialog";
 import type { CashFlow } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, Clock } from "lucide-react";
+import { Trash2, Clock, ChevronDown, ChevronsUpDown, ChevronsDownUp } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/kas")({
   head: () => ({
@@ -49,9 +58,9 @@ function KasPage() {
   const [amount, setAmount] = useState(0);
   const [note, setNote] = useState("");
 
-  const today = new Date().toISOString().slice(0, 10);
-  const todayFlows = (flows ?? []).filter((f) => f.occurred_at.slice(0, 10) === today);
-  const todayTx = (transactions ?? []).filter((t) => t.created_at.slice(0, 10) === today);
+  const today = todayIso();
+  const todayFlows = (flows ?? []).filter((f) => toLocalDateIso(f.occurred_at) === today);
+  const todayTx = (transactions ?? []).filter((t) => toLocalDateIso(t.created_at) === today);
 
   const modal = sum(todayFlows, "modal");
   const cashIn = sum(todayFlows, "in");
@@ -63,6 +72,88 @@ function KasPage() {
     .filter((t) => t.payment_method === "qris")
     .reduce((s, t) => s + t.total, 0);
   const balance = modal + cashIn + cashSales - cashOut;
+
+  // Kelompokkan catatan kas per hari
+  const dayGroups = useMemo(() => {
+    if (!flows || flows.length === 0) return [];
+
+    const map = new Map<string, CashFlow[]>();
+    for (const flow of flows) {
+      const key = toLocalDateIso(flow.occurred_at);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(flow);
+    }
+
+    const groups: {
+      dateKey: string;
+      dateLabel: string;
+      isToday: boolean;
+      flows: CashFlow[];
+      totalIn: number;
+      totalOut: number;
+    }[] = [];
+
+    for (const [dateKey, dayFlows] of map.entries()) {
+      const isCurrentDay = dateKey === today;
+      const d = new Date(dateKey + "T00:00:00");
+      const dateLabel = isCurrentDay
+        ? `Hari Ini · ${d.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "short", year: "numeric" })}`
+        : d.toLocaleDateString("id-ID", {
+            weekday: "long",
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          });
+
+      const totalIn = dayFlows
+        .filter((f) => f.type === "in" || f.type === "modal")
+        .reduce((s, f) => s + f.amount, 0);
+      const totalOut = dayFlows.filter((f) => f.type === "out").reduce((s, f) => s + f.amount, 0);
+
+      groups.push({
+        dateKey,
+        dateLabel,
+        isToday: isCurrentDay,
+        flows: dayFlows,
+        totalIn,
+        totalOut,
+      });
+    }
+
+    groups.sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+    return groups;
+  }, [flows, today]);
+
+  // Hanya hari ini yang langsung expand secara default
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(() => new Set([today]));
+  const [initializedDates, setInitializedDates] = useState(false);
+
+  useEffect(() => {
+    if (dayGroups.length > 0 && !initializedDates) {
+      setExpandedDates(new Set([today]));
+      setInitializedDates(true);
+    }
+  }, [dayGroups, initializedDates, today]);
+
+  function handleExpandAll() {
+    setExpandedDates(new Set(dayGroups.map((g) => g.dateKey)));
+  }
+
+  function handleCollapseAll() {
+    setExpandedDates(new Set());
+  }
+
+  function toggleDate(dateKey: string) {
+    setExpandedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) {
+        next.delete(dateKey);
+      } else {
+        next.add(dateKey);
+      }
+      return next;
+    });
+  }
 
   async function submit() {
     if (!dialog) return;
@@ -136,42 +227,142 @@ function KasPage() {
         </Button>
       </div>
 
-      <h2 className="mb-2 text-sm font-bold text-muted-foreground">Catatan Hari Ini</h2>
-      <div className="space-y-2">
-        {todayFlows.map((flow) => (
-          <div
-            key={flow.id}
-            className="flex items-center justify-between rounded-xl border border-border bg-card p-3"
-          >
-            <div>
-              <p className="text-sm font-semibold">{DIALOG_LABEL[flow.type]}</p>
-              <p className="text-xs text-muted-foreground">
-                {flow.note ?? "—"} · {formatTimeId(flow.occurred_at)}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span
-                className={
-                  flow.type === "out"
-                    ? "text-sm font-bold text-destructive"
-                    : "text-sm font-bold text-emerald-700 dark:text-emerald-400"
-                }
-              >
-                {flow.type === "out" ? "−" : "+"}
-                {formatRupiah(flow.amount)}
-              </span>
-              <button
-                onClick={() => void deleteCashFlow(flow.id)}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
+      {/* Riwayat Catatan Kas Dikelompokkan per Hari */}
+      <div className="mb-2.5 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-foreground">Riwayat Catatan Kas</h2>
+          <p className="text-[11px] text-muted-foreground">
+            Dikelompokkan per hari (hari ini terbuka otomatis).
+          </p>
+        </div>
+        {dayGroups.length > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExpandAll}
+              className="h-7 text-xs px-2 gap-1 font-medium"
+            >
+              <ChevronsUpDown className="h-3.5 w-3.5" />
+              Expand Semua
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCollapseAll}
+              className="h-7 text-xs px-2 gap-1 font-medium"
+            >
+              <ChevronsDownUp className="h-3.5 w-3.5" />
+              Collapse Semua
+            </Button>
           </div>
-        ))}
-        {!todayFlows.length && (
+        )}
+      </div>
+
+      <div className="space-y-2.5">
+        {dayGroups.map((group) => {
+          const isExpanded = expandedDates.has(group.dateKey);
+
+          return (
+            <div
+              key={group.dateKey}
+              className="rounded-2xl border border-border bg-card overflow-hidden shadow-xs transition-all"
+            >
+              {/* Group Header Button */}
+              <button
+                type="button"
+                onClick={() => toggleDate(group.dateKey)}
+                className="w-full flex items-center justify-between p-3.5 bg-muted/40 hover:bg-muted/60 transition-colors text-left"
+              >
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-foreground">{group.dateLabel}</span>
+                    {group.isToday && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold"
+                      >
+                        Hari Ini
+                      </Badge>
+                    )}
+                    <span className="text-[11px] text-muted-foreground">
+                      ({group.flows.length} catatan)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
+                    <span>
+                      Masuk:{" "}
+                      <strong className="text-emerald-700 dark:text-emerald-400">
+                        +{formatRupiah(group.totalIn)}
+                      </strong>
+                    </span>
+                    <span>
+                      Keluar:{" "}
+                      <strong className="text-destructive">−{formatRupiah(group.totalOut)}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 text-muted-foreground shrink-0 ml-2">
+                  <span className="text-xs font-semibold">{isExpanded ? "Tutup" : "Buka"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 transition-transform duration-200",
+                      isExpanded && "rotate-180",
+                    )}
+                  />
+                </div>
+              </button>
+
+              {/* Collapsible Content */}
+              {isExpanded && (
+                <div className="p-3 divide-y divide-border border-t border-border space-y-2">
+                  {group.flows.map((flow) => (
+                    <div
+                      key={flow.id}
+                      className="flex items-center justify-between pt-2 first:pt-0"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-foreground">
+                          {DIALOG_LABEL[flow.type]}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {flow.note ?? "—"} · {formatTimeId(flow.occurred_at)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={
+                            flow.type === "out"
+                              ? "text-xs font-bold text-destructive"
+                              : "text-xs font-bold text-emerald-700 dark:text-emerald-400"
+                          }
+                        >
+                          {flow.type === "out" ? "−" : "+"}
+                          {formatRupiah(flow.amount)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void deleteCashFlow(flow.id)}
+                          className="text-muted-foreground hover:text-destructive p-1 rounded-md transition-colors"
+                          title="Hapus catatan kas"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {dayGroups.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Belum ada catatan kas hari ini.
+            Belum ada catatan kas yang tersimpan.
           </p>
         )}
       </div>

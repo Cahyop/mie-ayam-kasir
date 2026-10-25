@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
-import { formatRupiah, formatDateId, formatTimeId, formatPlain } from "@/lib/format";
+import { formatRupiah, formatDateId, formatTimeId, formatPlain, isToday } from "@/lib/format";
 import { getShiftHistory } from "@/lib/shift";
 import { ShiftDetailDialog } from "@/components/shift-detail-dialog";
 import { EditTransactionDialog } from "@/components/edit-transaction-dialog";
@@ -12,7 +12,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ReceiptDialog } from "@/components/receipt-dialog";
 import { cn } from "@/lib/utils";
-import { Clock, FileText, ChevronRight, Store, Pencil } from "lucide-react";
+import {
+  Clock,
+  FileText,
+  ChevronRight,
+  ChevronDown,
+  ChevronsUpDown,
+  ChevronsDownUp,
+  Store,
+  Pencil,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/riwayat")({
   head: () => ({
@@ -70,6 +79,49 @@ export function RiwayatPage() {
   const assignedTxIds = new Set(shiftGroups.flatMap((g) => g.transactions.map((t) => t.id)));
   const unassignedTxs = (transactions ?? []).filter((t) => !assignedTxIds.has(t.id));
 
+  // Hanya sesi hari ini atau sesi yang sedang buka yang langsung expand secara default
+  const [expandedShiftIds, setExpandedShiftIds] = useState<Set<string>>(() => new Set());
+  const [initializedShifts, setInitializedShifts] = useState(false);
+
+  useEffect(() => {
+    if (shifts && !initializedShifts) {
+      const initial = new Set<string>();
+      for (const s of shifts) {
+        const isCurrentDay = isToday(s.closed_at || s.opened_at);
+        if (s.status === "open" || isCurrentDay) {
+          initial.add(s.id);
+        }
+      }
+      if (unassignedTxs.some((t) => isToday(t.created_at))) {
+        initial.add("unassigned");
+      }
+      setExpandedShiftIds(initial);
+      setInitializedShifts(true);
+    }
+  }, [shifts, initializedShifts, unassignedTxs]);
+
+  function handleExpandAll() {
+    const all = new Set<string>((shifts ?? []).map((s) => s.id));
+    if (unassignedTxs.length > 0) all.add("unassigned");
+    setExpandedShiftIds(all);
+  }
+
+  function handleCollapseAll() {
+    setExpandedShiftIds(new Set());
+  }
+
+  function toggleShift(shiftId: string) {
+    setExpandedShiftIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(shiftId)) {
+        next.delete(shiftId);
+      } else {
+        next.add(shiftId);
+      }
+      return next;
+    });
+  }
+
   function buildReceipt(t: Transaction, items: Awaited<ReturnType<typeof loadItems>>) {
     const customer = customers?.find((c) => c.id === t.customer_id);
     return {
@@ -101,11 +153,37 @@ export function RiwayatPage() {
 
   return (
     <div className="space-y-4 pb-10">
-      <div>
-        <h1 className="text-lg font-bold">Riwayat Sesi &amp; Penjualan</h1>
-        <p className="text-xs text-muted-foreground">
-          Transaksi dikelompokkan per sesi buka kasir (shift) lengkap dengan laporan closing.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold">Riwayat Sesi &amp; Penjualan</h1>
+          <p className="text-xs text-muted-foreground">
+            Dikelompokkan per sesi kasir (hari ini terbuka otomatis).
+          </p>
+        </div>
+        {hasAnyData && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExpandAll}
+              className="h-7 text-xs px-2 gap-1 font-medium"
+            >
+              <ChevronsUpDown className="h-3.5 w-3.5" />
+              Expand Semua
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCollapseAll}
+              className="h-7 text-xs px-2 gap-1 font-medium"
+            >
+              <ChevronsDownUp className="h-3.5 w-3.5" />
+              Collapse Semua
+            </Button>
+          </div>
+        )}
       </div>
 
       {!hasAnyData && (
@@ -121,6 +199,9 @@ export function RiwayatPage() {
       {/* Daftar Sesi Buka/Tutup Kasir */}
       {shiftGroups.map(({ shift, transactions: shiftTxs, omset, cashCount, qrisCount }) => {
         const isOpen = shift.status === "open";
+        const isCurrentDay = isToday(shift.closed_at || shift.opened_at);
+        const isExpanded = expandedShiftIds.has(shift.id);
+
         const dOpen = new Date(shift.opened_at);
         const dClose = shift.closed_at ? new Date(shift.closed_at) : null;
 
@@ -143,10 +224,13 @@ export function RiwayatPage() {
         return (
           <section
             key={shift.id}
-            className="rounded-2xl border border-border bg-card overflow-hidden shadow-xs"
+            className="rounded-2xl border border-border bg-card overflow-hidden shadow-xs transition-all"
           >
             {/* Header Sesi Kasir */}
-            <div className="border-b border-border bg-muted/40 p-3.5 space-y-2">
+            <div
+              onClick={() => toggleShift(shift.id)}
+              className="border-b border-border bg-muted/40 p-3.5 space-y-2 cursor-pointer hover:bg-muted/60 transition-colors select-none"
+            >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span
@@ -156,7 +240,7 @@ export function RiwayatPage() {
                     )}
                   />
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-bold text-foreground">
                         {isOpen ? "Sesi Kasir Aktif (Sedang Buka)" : `Sesi Closing (${dateLabel})`}
                       </span>
@@ -171,6 +255,14 @@ export function RiwayatPage() {
                       >
                         {isOpen ? "BUKA" : "DITUTUP"}
                       </Badge>
+                      {isCurrentDay && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 h-4 font-semibold border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
+                        >
+                          Hari Ini
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
@@ -179,18 +271,32 @@ export function RiwayatPage() {
                   </div>
                 </div>
 
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs font-semibold gap-1 px-2.5 shrink-0"
-                  onClick={() => {
-                    setSelectedShift(shift);
-                    setShiftDialogOpen(true);
-                  }}
-                >
-                  <FileText className="h-3.5 w-3.5 text-primary" />
-                  {isOpen ? "Rekap Shift" : "Laporan Closing"}
-                </Button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs font-semibold gap-1 px-2.5 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedShift(shift);
+                      setShiftDialogOpen(true);
+                    }}
+                  >
+                    <FileText className="h-3.5 w-3.5 text-primary" />
+                    {isOpen ? "Rekap Shift" : "Laporan Closing"}
+                  </Button>
+
+                  <div className="flex items-center gap-1 text-muted-foreground text-xs font-semibold pl-1">
+                    <span>{isExpanded ? "Tutup" : "Buka"}</span>
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 transition-transform duration-200",
+                        isExpanded && "rotate-180",
+                      )}
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Ringkasan Angka Shift */}
@@ -232,133 +338,154 @@ export function RiwayatPage() {
               </div>
             </div>
 
-            {/* Daftar Transaksi dalam Sesi Ini */}
-            <div className="p-3">
-              {shiftTxs.length === 0 ? (
-                <p className="py-4 text-center text-xs text-muted-foreground">
-                  Belum ada transaksi penjualan pada sesi kasir ini.
-                </p>
-              ) : (
-                <div className="space-y-1.5">
-                  {shiftTxs.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setOpenId(t.id)}
-                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
-                    >
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-bold text-foreground">{t.receipt_no}</p>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[10px] px-1.5 py-0 h-4 font-normal",
-                              t.order_type === "take_away"
-                                ? "border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+            {/* Daftar Transaksi dalam Sesi Ini (Collapsible) */}
+            {isExpanded && (
+              <div className="p-3">
+                {shiftTxs.length === 0 ? (
+                  <p className="py-4 text-center text-xs text-muted-foreground">
+                    Belum ada transaksi penjualan pada sesi kasir ini.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {shiftTxs.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => setOpenId(t.id)}
+                        className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
+                      >
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-bold text-foreground">{t.receipt_no}</p>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] px-1.5 py-0 h-4 font-normal",
+                                t.order_type === "take_away"
+                                  ? "border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                                  : t.order_type === "mixed"
+                                    ? "border-purple-500/40 text-purple-700 dark:text-purple-400 bg-purple-500/10"
+                                    : "border-primary/30 text-primary bg-primary/10",
+                              )}
+                            >
+                              {t.order_type === "take_away"
+                                ? "Bungkus"
                                 : t.order_type === "mixed"
-                                  ? "border-purple-500/40 text-purple-700 dark:text-purple-400 bg-purple-500/10"
-                                  : "border-primary/30 text-primary bg-primary/10",
-                            )}
-                          >
-                            {t.order_type === "take_away"
-                              ? "Bungkus"
-                              : t.order_type === "mixed"
-                                ? "Campur"
-                                : "Makan di Tempat"}
-                          </Badge>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">
-                          {formatTimeId(t.created_at)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-right">
-                          <p className="text-xs font-bold text-foreground">
-                            {formatRupiah(t.total)}
+                                  ? "Campur"
+                                  : "Makan di Tempat"}
+                            </Badge>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            {formatTimeId(t.created_at)}
                           </p>
-                          <Badge
-                            variant="secondary"
-                            className={cn(
-                              "text-[10px] px-1.5 py-0 h-4 font-semibold",
-                              t.payment_method === "cash"
-                                ? "text-emerald-700 dark:text-emerald-400"
-                                : "text-sky-700 dark:text-sky-400",
-                            )}
-                          >
-                            {t.payment_method === "cash" ? "Tunai" : "QRIS"}
-                          </Badge>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground/60" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <p className="text-xs font-bold text-foreground">
+                              {formatRupiah(t.total)}
+                            </p>
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                "text-[10px] px-1.5 py-0 h-4 font-semibold",
+                                t.payment_method === "cash"
+                                  ? "text-emerald-700 dark:text-emerald-400"
+                                  : "text-sky-700 dark:text-sky-400",
+                              )}
+                            >
+                              {t.payment_method === "cash" ? "Tunai" : "QRIS"}
+                            </Badge>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground/60" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         );
       })}
 
       {/* Transaksi yang Belum/Tidak Terikat Shift */}
       {unassignedTxs.length > 0 && (
-        <section className="rounded-2xl border border-border bg-card p-3.5 space-y-2 shadow-xs">
-          <div className="border-b border-border pb-1.5">
-            <p className="text-xs font-bold text-muted-foreground">
-              Transaksi Lainnya ({unassignedTxs.length} nota)
-            </p>
+        <section className="rounded-2xl border border-border bg-card overflow-hidden shadow-xs">
+          <div
+            onClick={() => toggleShift("unassigned")}
+            className="flex items-center justify-between p-3.5 bg-muted/40 hover:bg-muted/60 transition-colors cursor-pointer select-none border-b border-border"
+          >
+            <div>
+              <p className="text-xs font-bold text-foreground">
+                Transaksi Lainnya ({unassignedTxs.length} nota)
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Transaksi di luar sesi kasir yang tercatat
+              </p>
+            </div>
+            <div className="flex items-center gap-1 text-muted-foreground text-xs font-semibold">
+              <span>{expandedShiftIds.has("unassigned") ? "Tutup" : "Buka"}</span>
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 transition-transform duration-200",
+                  expandedShiftIds.has("unassigned") && "rotate-180",
+                )}
+              />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            {unassignedTxs.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setOpenId(t.id)}
-                className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
-              >
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-bold text-foreground">{t.receipt_no}</p>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[10px] px-1.5 py-0 h-4 font-normal",
-                        t.order_type === "take_away"
-                          ? "border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+          {expandedShiftIds.has("unassigned") && (
+            <div className="p-3 space-y-1.5">
+              {unassignedTxs.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setOpenId(t.id)}
+                  className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-2.5 text-left transition-colors hover:bg-muted/50 active:scale-[0.99]"
+                >
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-bold text-foreground">{t.receipt_no}</p>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] px-1.5 py-0 h-4 font-normal",
+                          t.order_type === "take_away"
+                            ? "border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                            : t.order_type === "mixed"
+                              ? "border-purple-500/40 text-purple-700 dark:text-purple-400 bg-purple-500/10"
+                              : "border-primary/30 text-primary bg-primary/10",
+                        )}
+                      >
+                        {t.order_type === "take_away"
+                          ? "Bungkus"
                           : t.order_type === "mixed"
-                            ? "border-purple-500/40 text-purple-700 dark:text-purple-400 bg-purple-500/10"
-                            : "border-primary/30 text-primary bg-primary/10",
-                      )}
-                    >
-                      {t.order_type === "take_away"
-                        ? "Bungkus"
-                        : t.order_type === "mixed"
-                          ? "Campur"
-                          : "Makan di Tempat"}
-                    </Badge>
+                            ? "Campur"
+                            : "Makan di Tempat"}
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {formatDateId(t.created_at)} · {formatTimeId(t.created_at)}
+                    </p>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    {formatDateId(t.created_at)} · {formatTimeId(t.created_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-foreground">{formatRupiah(t.total)}</p>
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        "text-[10px] px-1.5 py-0 h-4 font-semibold",
-                        t.payment_method === "cash"
-                          ? "text-emerald-700 dark:text-emerald-400"
-                          : "text-sky-700 dark:text-sky-400",
-                      )}
-                    >
-                      {t.payment_method === "cash" ? "Tunai" : "QRIS"}
-                    </Badge>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <p className="text-xs font-bold text-foreground">{formatRupiah(t.total)}</p>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "text-[10px] px-1.5 py-0 h-4 font-semibold",
+                          t.payment_method === "cash"
+                            ? "text-emerald-700 dark:text-emerald-400"
+                            : "text-sky-700 dark:text-sky-400",
+                        )}
+                      >
+                        {t.payment_method === "cash" ? "Tunai" : "QRIS"}
+                      </Badge>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/60" />
                   </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground/60" />
-                </div>
-              </button>
-            ))}
-          </div>
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       )}
 

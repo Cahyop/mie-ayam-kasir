@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { buildReceiptLines, buildWaText, waHref, receiptCols } from "@/lib/receipt";
-import { formatRupiah, formatPlain, makeReceiptNo } from "@/lib/format";
+import {
+  formatRupiah,
+  formatPlain,
+  makeReceiptNo,
+  todayIso,
+  toLocalDateIso,
+  isToday,
+} from "@/lib/format";
 import { getNextReceiptNo, computeTransactionOrderType } from "@/lib/sales";
 import { buildShiftReceiptLines, buildShiftWaText } from "@/lib/shift";
 import { db, resetTransactionData } from "@/lib/db";
@@ -251,5 +258,17 @@ describe("Receipt and format helpers", () => {
     // Transactions cleared, products preserved!
     expect(await db.transactions.count()).toBe(0);
     expect(await db.products.count()).toBeGreaterThan(0);
+  });
+
+  it("handles date grouping helpers correctly", () => {
+    const today = todayIso();
+    expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    const now = new Date().toISOString();
+    expect(toLocalDateIso(now)).toBe(today);
+    expect(isToday(now)).toBe(true);
+
+    const yesterdayIso = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    expect(isToday(yesterdayIso)).toBe(false);
   });
 });

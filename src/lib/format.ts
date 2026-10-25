@@ -43,8 +43,14 @@ export function todayIso(): string {
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 }
 
+export function toLocalDateIso(iso: string): string {
+  const d = new Date(iso);
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+
 export function isToday(iso: string): boolean {
-  return iso.slice(0, 10) === todayIso();
+  return toLocalDateIso(iso) === todayIso();
 }
 
 export function makeReceiptNo(seq = 1, d = new Date()): string {
